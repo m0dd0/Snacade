@@ -1,5 +1,6 @@
 import adsk.core, adsk.fusion, adsk.cam, traceback
 
+from .fusion_addin_framework import fusion_addin_framework as faf
 
 class Snake:
     _allowed_moves = ["left", "right", "up", "down"]
@@ -84,7 +85,7 @@ class Game:
             
         if self._snake.head in self._foods:
             self._snake.eat()
-            self.foods.
+            # self.foods.
 
         self._update_world()
 
@@ -109,14 +110,18 @@ class Game:
     def reset(self):
         pass
 
+def input_changed():
+    pass
+
 
 def run(context):
-    ui = None
     try:
-        app = adsk.core.Application.get()
-        ui = app.userInterface
-        ui.messageBox("Hello addin")
-
+        addin = faf.Addin()
+        workspace = faf.Workspace()
+        tab = faf.Panel()
+        panel = faf.Panel()
+        control = faf.Control()
+        command = faf.AddinCommand()
     except:
         if ui:
             ui.messageBox("Failed:\n{}".format(traceback.format_exc()))
