@@ -1,4 +1,7 @@
-import adsk.core, adsk.fusion, adsk.cam, traceback
+import traceback
+import logging
+
+import adsk.core, adsk.fusion, adsk.cam
 
 from .fusion_addin_framework import fusion_addin_framework as faf
 from .voxler import voxler as vox
@@ -57,25 +60,29 @@ class Snake:
 
 
 class Game:
-    maze_a = {(1, 0, 0), (2, 0, 0)}
+    maze_a = {(1, 5), (2, 5), (3, 5)}
 
     start_config_a = {
         "maze": maze_a,
-        "snake_head": (0, 0, 0),
+        "snake_head": (0, 0),
         "snake_direction": "up",
-        "snake_length": 3,
+        "snake_length": 4,
     }
 
-    maze_voxel_style = {"voxel_class": vox.DirectCube, "color": None, "apearance": None}
+    maze_voxel_style = {
+        "voxel_class": vox.DirectCube,
+        "color": None,
+        "appearance": "Steel - Satin",
+    }
     snake_body_voxel_style = {
         "voxel_class": vox.DirectSphere,
         "color": None,
-        "apearance": None,
+        "appearance": "Steel - Satin",
     }
     snake_head_voxel_style = {
         "voxel_class": vox.DirectSphere,
-        "color": None,
-        "apearance": None,
+        "color": (255, 0, 0, 255),
+        "appearance": "Steel - Satin",
     }
 
     def __init__(self, world, start_config, n_foods):
@@ -91,20 +98,26 @@ class Game:
         # for _ in n_foods:
         #     self._create_food()
 
+        self._update_world()
+
     def _create_food(self):
         pass
         # self._foods.append(random.)
 
     def _update_world(self):
+        print(self._snake.body)
+        print(self._snake.head)
         self._world.update(
-            {c: self.maze_voxel_style for c in self._maze}
-            + {c: self.snake_body_voxel_style for c in self._snake.body}
-            + {self._snake.head: self.snake_head_voxel_style}
+            {
+                **{(*c, 0): self.maze_voxel_style for c in self._maze},
+                **{(*c, 0): self.snake_body_voxel_style for c in self._snake.body},
+                **{(*self._snake.head, 0): self.snake_head_voxel_style},
+            }
         )
 
     def move_snake(self):
         self._snake.move()
-        if self._snake.head in self._maze() or self._snake.head in self._snake.body:
+        if self._snake.head in self._maze or self._snake.head in self._snake.body:
             # Game over
             pass
 
@@ -116,15 +129,19 @@ class Game:
 
     def left(self):
         self._snake.set_direction("left")
+        self.move_snake()
 
     def right(self):
         self._snake.set_direction("right")
+        self.move_snake()
 
     def up(self):
         self._snake.set_direction("up")
+        self.move_snake()
 
     def down(self):
         self._snake.set_direction("down")
+        self.move_snake()
 
     def play(self):
         pass
@@ -136,10 +153,48 @@ class Game:
         pass
 
 
-def input_changed():
+addin = None
+game = None
+
+
+def on_input_changed(event_args):
     pass
 
-def 
+
+def on_created(event_args: adsk.core.CommandCreatedEventArgs):
+    design = adsk.core.Application.get().activeDocument.design
+    if design.designType == adsk.fusion.DesignTypes.ParametricDesignType:
+        dialog_result = adsk.core.Application.get().userInterface.messageBox(
+            "WARNING: Snacade can only be played in direct design mode.\n"
+            + "Do you want to switch to direct design mode by disabling the timeline?\n\n"
+            + "The timeline and all design history will be removed, \n"
+            + "and further operations will not be captured in the timeline.",
+            "Warning",
+            adsk.core.MessageBoxButtonTypes.YesNoButtonType,
+        )
+        if dialog_result == adsk.core.DialogResults.DialogYes:
+            design.designType = adsk.fusion.DesignTypes.DirectDesignType
+        else:
+            return
+
+    event_args.command.commandInputs.addBoolValueInput("boolInputId", "my input", True)
+
+    global game
+    game = Game(
+        vox.VoxelWorld(1, faf.utils.new_comp("snacade")), Game.start_config_a, 10
+    )
+
+
+def on_key_down(event_args: adsk.core.KeyboardEventArgs):
+    {
+        adsk.core.KeyCodes.UpKeyCode: game.up,
+        adsk.core.KeyCodes.LeftKeyCode: game.left,
+        adsk.core.KeyCodes.RightKeyCode: game.right,
+        adsk.core.KeyCodes.DownKeyCode: game.down,
+    }.get(event_args.keyCode, lambda: None)()
+
+    event_args.firingEvent.sender.doExecute(False)
+
 
 def run(context):
     ui = None
@@ -147,16 +202,30 @@ def run(context):
         app = adsk.core.Application.get()
         ui = app.userInterface
 
-        addin = faf.Addin()
-        workspace = faf.Workspace()
-        tab = faf.Panel()
-        panel = faf.Panel()
-        control = faf.Control()
-        command = faf.AddinCommand()
+        faf.utils.create_logger(
+            faf.__name__,
+            [logging.StreamHandler(), faf.utils.TextPaletteLoggingHandler()],
+        )
+
+        global addin
+        addin = faf.FusionAddin()
+        workspace = faf.Workspace(addin)
+        tab = faf.Tab(workspace)
+        panel = faf.Panel(tab)
+        control = faf.Control(panel)
+        command = faf.AddinCommand(
+            control,
+            name="snacade",
+            commandCreated=on_created,
+            inputChanged=on_input_changed,
+            keyDown=on_key_down,
+        )
 
     except:
+        msg = "Failed:\n{}".format(traceback.format_exc())
         if ui:
-            ui.messageBox("Failed:\n{}".format(traceback.format_exc()))
+            ui.messageBox(msg)
+        print(msg)
 
 
 def stop(context):
@@ -164,6 +233,9 @@ def stop(context):
     try:
         app = adsk.core.Application.get()
         ui = app.userInterface
+        addin.stop()
     except:
+        msg = "Failed:\n{}".format(traceback.format_exc())
         if ui:
-            ui.messageBox("Failed:\n{}".format(traceback.format_exc()))
+            ui.messageBox(msg)
+        print(msg)
