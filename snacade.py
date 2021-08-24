@@ -1,6 +1,8 @@
 import adsk.core, adsk.fusion, adsk.cam, traceback
 
 from .fusion_addin_framework import fusion_addin_framework as faf
+from .voxler import voxler as vox
+
 
 class Snake:
     _allowed_moves = ["left", "right", "up", "down"]
@@ -55,21 +57,43 @@ class Snake:
 
 
 class Game:
-    maze_a = {(1, 1), (2, 2)}
+    maze_a = {(1, 0, 0), (2, 0, 0)}
 
-    maze_voxel_style = (DirectCube, None, None)
-    snake_body_voxel_style = (DirectSphere, None, None)
-    snake_head_voxel_style = (DirectSphere, None, None)
+    start_config_a = {
+        "maze": maze_a,
+        "snake_head": (0, 0, 0),
+        "snake_direction": "up",
+        "snake_length": 3,
+    }
 
-    def __init__(self, maze, start_head, start_length, start_direction, n_foods):
-        self._maze = maze
-        self._snake = Snake(start_head, start_direction, start_length)
+    maze_voxel_style = {"voxel_class": vox.DirectCube, "color": None, "apearance": None}
+    snake_body_voxel_style = {
+        "voxel_class": vox.DirectSphere,
+        "color": None,
+        "apearance": None,
+    }
+    snake_head_voxel_style = {
+        "voxel_class": vox.DirectSphere,
+        "color": None,
+        "apearance": None,
+    }
+
+    def __init__(self, world, start_config, n_foods):
+        self._world = world
+
+        self._maze = start_config["maze"]
+        self._snake = Snake(
+            start_config["snake_head"],
+            start_config["snake_direction"],
+            start_config["snake_length"],
+        )
         self._foods = {}
-        for _ in n_foods:
-            self._create_food()
+        # for _ in n_foods:
+        #     self._create_food()
 
-    def _food_coord(self):
-        return random.
+    def _create_food(self):
+        pass
+        # self._foods.append(random.)
 
     def _update_world(self):
         self._world.update(
@@ -82,7 +106,8 @@ class Game:
         self._snake.move()
         if self._snake.head in self._maze() or self._snake.head in self._snake.body:
             # Game over
-            
+            pass
+
         if self._snake.head in self._foods:
             self._snake.eat()
             # self.foods.
@@ -93,13 +118,13 @@ class Game:
         self._snake.set_direction("left")
 
     def right(self):
-        pass
+        self._snake.set_direction("right")
 
     def up(self):
-        pass
+        self._snake.set_direction("up")
 
     def down(self):
-        pass
+        self._snake.set_direction("down")
 
     def play(self):
         pass
@@ -110,18 +135,25 @@ class Game:
     def reset(self):
         pass
 
+
 def input_changed():
     pass
 
+def 
 
 def run(context):
+    ui = None
     try:
+        app = adsk.core.Application.get()
+        ui = app.userInterface
+
         addin = faf.Addin()
         workspace = faf.Workspace()
         tab = faf.Panel()
         panel = faf.Panel()
         control = faf.Control()
         command = faf.AddinCommand()
+
     except:
         if ui:
             ui.messageBox("Failed:\n{}".format(traceback.format_exc()))
@@ -132,8 +164,6 @@ def stop(context):
     try:
         app = adsk.core.Application.get()
         ui = app.userInterface
-        ui.messageBox("Stop addin")
-
     except:
         if ui:
             ui.messageBox("Failed:\n{}".format(traceback.format_exc()))
