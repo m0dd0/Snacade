@@ -12,11 +12,10 @@ class Snake:
 
     def __init__(self, head, orientation, body_length):
         self._current_direction = orientation
-        self._elements = [head]
-        # + [
-        #     self._move_coordinate(head, self._current_direction, -i)
-        #     for i in range(1, body_length)
-        # ]
+        self._elements = [head] + [
+            self._move_coordinate(head, self._current_direction, -i)
+            for i in range(1, body_length)
+        ]
 
         # self._last_tail = None
         # self._move_coordinate(head, self._current_direction, -body_length - 1)
@@ -42,13 +41,21 @@ class Snake:
     #     return self._elements[-1]
 
     def move(self):
-        self._elements = [self._move_coordinate(self.head, self._current_direction)]
-        # + self.body[:-1]
+        self._elements.insert(
+            0, self._move_coordinate(self._elements[0], self._current_direction)
+        )
+        self._elements.pop()
 
     def set_direction(self, new_direction):
         if new_direction not in self._allowed_moves:
             raise ValueError()
-        self._current_direction = new_direction
+        if (self._current_direction, new_direction) not in [
+            ("up", "down"),
+            ("down", "up"),
+            ("left", "right"),
+            ("right", "left"),
+        ]:
+            self._current_direction = new_direction
 
     @property
     def head(self):
@@ -117,7 +124,7 @@ class Game:
         self._world.update(
             {
                 **{(*c, 0): self.maze_voxel_style for c in self._maze},
-                # **{(*c, 0): self.snake_body_voxel_style for c in self._snake.body},
+                **{(*c, 0): self.snake_body_voxel_style for c in self._snake.body},
                 **{(*self._snake.head, 0): self.snake_head_voxel_style},
             }
         )
@@ -154,7 +161,6 @@ game = None
 
 def on_execute(event_args):
     game.update_world()
-    print("execute")
 
 
 def on_input_changed(event_args):
