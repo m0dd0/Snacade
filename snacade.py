@@ -102,6 +102,17 @@ class Game:
         pass
         # self._foods.append(random.)
 
+    def _move_snake(self):
+        self._snake.move()
+        if self._snake.head in self._maze or self._snake.head in self._snake.body:
+            # Game over
+            pass
+
+        if self._snake.head in self._foods:
+            pass
+            # self._snake.eat()
+        # self.foods.
+
     def update_world(self):
         self._world.update(
             {
@@ -111,35 +122,21 @@ class Game:
             }
         )
 
-        # def move_snake(self):
-        #     self._snake.move()
-        # if self._snake.head in self._maze or self._snake.head in self._snake.body:
-        # Game over
-        # pass
-
-        # if self._snake.head in self._foods:
-        #     self._snake.eat()
-        # self.foods.
-
     def left(self):
         self._snake.set_direction("left")
-        # self.move_snake()
-        self._snake.move()
+        self._move_snake()
 
     def right(self):
         self._snake.set_direction("right")
-        # self.move_snake()
-        self._snake.move()
+        self._move_snake()
 
     def up(self):
         self._snake.set_direction("up")
-        # self.move_snake()
-        self._snake.move()
+        self._move_snake()
 
     def down(self):
         self._snake.set_direction("down")
-        # self.move_snake()
-        self._snake.move()
+        self._move_snake()
 
     def play(self):
         pass
@@ -153,11 +150,11 @@ class Game:
 
 addin = None
 game = None
-comp = None
 
 
 def on_execute(event_args):
     game.update_world()
+    print("execute")
 
 
 def on_input_changed(event_args):
@@ -187,7 +184,10 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
         vox.VoxelWorld(1, faf.utils.new_comp("snacade")), Game.start_config_a, 10
     )
 
-    event_args.command.doExecute(False)
+    # does not work because command hasnt been created yet
+    # event_args.command.doExecute(False)
+    # but updating world / creating bodies works in creaed handler (but not in keyDown handler)
+    game.update_world()
 
 
 def on_key_down(event_args: adsk.core.KeyboardEventArgs):
