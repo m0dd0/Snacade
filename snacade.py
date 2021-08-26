@@ -12,12 +12,13 @@ class Snake:
 
     def __init__(self, head, orientation, body_length):
         self._current_direction = orientation
-        self._elements = [head] + [
-            self._move_coordinate(head, self._current_direction, -i)
-            for i in range(1, body_length)
-        ]
+        self._elements = [head]
+        # + [
+        #     self._move_coordinate(head, self._current_direction, -i)
+        #     for i in range(1, body_length)
+        # ]
 
-        self._last_tail = None
+        # self._last_tail = None
         # self._move_coordinate(head, self._current_direction, -body_length - 1)
 
     def _move_coordinate(self, coord, direction, i=1):
@@ -33,17 +34,16 @@ class Snake:
 
         return (coord[0] + x_dir * i, coord[1] + y_dir * i)
 
-    def eat(self):
-        if self._last_tail is None:
-            return False
-        self._elements.append(self._last_tail)
-        self._last_tail = None
-        return self._elements[-1]
+    # def eat(self):
+    #     if self._last_tail is None:
+    #         return False
+    #     self._elements.append(self._last_tail)
+    #     self._last_tail = None
+    #     return self._elements[-1]
 
     def move(self):
-        self._elements = [
-            self._move_coordinate(self.head, self._current_direction)
-        ] + self.body[:-1]
+        self._elements = [self._move_coordinate(self.head, self._current_direction)]
+        # + self.body[:-1]
 
     def set_direction(self, new_direction):
         if new_direction not in self._allowed_moves:
@@ -98,50 +98,48 @@ class Game:
         # for _ in n_foods:
         #     self._create_food()
 
-        self._update_world()
-
     def _create_food(self):
         pass
         # self._foods.append(random.)
 
-    def _update_world(self):
-        print(self._snake.body)
-        print(self._snake.head)
+    def update_world(self):
         self._world.update(
             {
                 **{(*c, 0): self.maze_voxel_style for c in self._maze},
-                **{(*c, 0): self.snake_body_voxel_style for c in self._snake.body},
+                # **{(*c, 0): self.snake_body_voxel_style for c in self._snake.body},
                 **{(*self._snake.head, 0): self.snake_head_voxel_style},
             }
         )
 
-    def move_snake(self):
-        self._snake.move()
-        if self._snake.head in self._maze or self._snake.head in self._snake.body:
-            # Game over
-            pass
+        # def move_snake(self):
+        #     self._snake.move()
+        # if self._snake.head in self._maze or self._snake.head in self._snake.body:
+        # Game over
+        # pass
 
-        if self._snake.head in self._foods:
-            self._snake.eat()
-            # self.foods.
-
-        self._update_world()
+        # if self._snake.head in self._foods:
+        #     self._snake.eat()
+        # self.foods.
 
     def left(self):
         self._snake.set_direction("left")
-        self.move_snake()
+        # self.move_snake()
+        self._snake.move()
 
     def right(self):
         self._snake.set_direction("right")
-        self.move_snake()
+        # self.move_snake()
+        self._snake.move()
 
     def up(self):
         self._snake.set_direction("up")
-        self.move_snake()
+        # self.move_snake()
+        self._snake.move()
 
     def down(self):
         self._snake.set_direction("down")
-        self.move_snake()
+        # self.move_snake()
+        self._snake.move()
 
     def play(self):
         pass
@@ -155,6 +153,11 @@ class Game:
 
 addin = None
 game = None
+comp = None
+
+
+def on_execute(event_args):
+    game.update_world()
 
 
 def on_input_changed(event_args):
@@ -183,6 +186,8 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
     game = Game(
         vox.VoxelWorld(1, faf.utils.new_comp("snacade")), Game.start_config_a, 10
     )
+
+    event_args.command.doExecute(False)
 
 
 def on_key_down(event_args: adsk.core.KeyboardEventArgs):
@@ -219,6 +224,7 @@ def run(context):
             commandCreated=on_created,
             inputChanged=on_input_changed,
             keyDown=on_key_down,
+            execute=on_execute,
         )
 
     except:
