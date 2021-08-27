@@ -71,8 +71,8 @@ class Game:
     start_config_a = {
         "height": 20,
         "width": 50,
-        "obstacles": {(10, 20), (11, 20), (12, 20)},
-        "snake_head": (0, 0),
+        "obstacles": {(20, 5), (21, 5), (22, 5)},
+        "snake_head": (25, 10),
         "snake_direction": "up",
         "snake_length": 4,
     }
@@ -218,20 +218,10 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
     global game
     game = Game(world, Game.start_config_a)
 
-    camera = adsk.core.Application.get().activeViewport.camera
-
-    # camera.target = adsk.core.Point3D.create(1, 1, 0)
-    # print(camera.eye.asArray())
-    # camera.eye = adsk.core.Point3D.create(0, 0, 25)
-    # camera.upVector = adsk.core.Vector3D.create(0, 0, 1)
-    # camera.isSmoothTransition = False
-    # camera.viewExtents = faf.utils.view_extent_by_rectangle(50, 20)
-    # adsk.core.Application.get().activeViewport.camera = camera
-
     faf.utils.set_camera(
         plane=game.plane,
-        horizontal_borders=(0, game.width * world.grid_size),
-        vertical_borders=(0, game.height * world.grid_size),
+        horizontal_borders=(-1 * world.grid_size, (game.width + 1) * world.grid_size),
+        vertical_borders=(-1 * world.grid_size, (game.height + 1) * world.grid_size),
     )
 
     # does not work because command hasnt been created yet
