@@ -1,5 +1,6 @@
 import traceback
 import logging
+import random
 
 import adsk.core, adsk.fusion, adsk.cam
 
@@ -67,10 +68,10 @@ class Snake:
 
 
 class Game:
-    maze_a = {(1, 5), (2, 5), (3, 5)}
-
     start_config_a = {
-        "maze": maze_a,
+        "height": 20,
+        "width": 50,
+        "obstacles": {(10, 20), (11, 20), (12, 20)},
         "snake_head": (0, 0),
         "snake_direction": "up",
         "snake_length": 4,
@@ -92,35 +93,51 @@ class Game:
         "appearance": "Steel - Satin",
     }
 
-    def __init__(self, world, start_config, n_foods):
+    def __init__(self, world, start_config):
         self._world = world
 
-        self._maze = start_config["maze"]
+        self._height = start_config["height"]
+        self._width = start_config["width"]
+
+        self._plane = "xy"  # TODO setable
+
+        self._maze = set().union(
+            {(i, 0) for i in range(self._width)},
+            {(i, self._height) for i in range(self._width)},
+            {(0, j) for j in range(self._height)},
+            {(self._width, j) for j in range(self._height)},
+            start_config["obstacles"],
+        )
+
+        # use list to enable the use of random.choice
+        self._possible_food_positions = list(
+            {
+                (i, j)
+                for i in range(1, start_config["height"] - 1)
+                for j in range(1, start_config["width"] - 1)
+            }
+            - start_config["obstacles"]
+        )
+
         self._snake = Snake(
             start_config["snake_head"],
             start_config["snake_direction"],
             start_config["snake_length"],
         )
-        self._foods = {}
-        # for _ in n_foods:
-        #     self._create_food()
 
-    def _create_food(self):
-        pass
-        # self._foods.append(random.)
+        self._food = random.choice(self._possible_food_positions)
 
     def _move_snake(self):
         self._snake.move()
-        if self._snake.head in self._maze or self._snake.head in self._snake.body:
-            # Game over
-            pass
+        # if self._snake.head in self._maze or self._snake.head in self._snake.body:
+        #     adsk.core.Application.get().userInterface.messageBox("GAME OVER")
 
-        if self._snake.head in self._foods:
-            pass
-            # self._snake.eat()
-        # self.foods.
+        # if self._snake.head == self._food:
+        #     self._snake.eat()
+        # self._food = random.choice(self._possible_food_positions)
 
     def update_world(self):
+        # TODO adapt for setable drawing plane
         self._world.update(
             {
                 **{(*c, 0): self.maze_voxel_style for c in self._maze},
@@ -154,6 +171,18 @@ class Game:
     def reset(self):
         pass
 
+    @property
+    def height(self):
+        return self._height
+
+    @property
+    def width(self):
+        return self._width
+
+    @property
+    def plane(self):
+        return self._plane
+
 
 addin = None
 game = None
@@ -185,9 +214,24 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
 
     event_args.command.commandInputs.addBoolValueInput("boolInputId", "my input", True)
 
+    world = vox.VoxelWorld(1, faf.utils.new_comp("snacade"))
     global game
-    game = Game(
-        vox.VoxelWorld(1, faf.utils.new_comp("snacade")), Game.start_config_a, 10
+    game = Game(world, Game.start_config_a)
+
+    camera = adsk.core.Application.get().activeViewport.camera
+
+    # camera.target = adsk.core.Point3D.create(1, 1, 0)
+    # print(camera.eye.asArray())
+    # camera.eye = adsk.core.Point3D.create(0, 0, 25)
+    # camera.upVector = adsk.core.Vector3D.create(0, 0, 1)
+    # camera.isSmoothTransition = False
+    # camera.viewExtents = faf.utils.view_extent_by_rectangle(50, 20)
+    # adsk.core.Application.get().activeViewport.camera = camera
+
+    faf.utils.set_camera(
+        plane=game.plane,
+        horizontal_borders=(0, game.width * world.grid_size),
+        vertical_borders=(0, game.height * world.grid_size),
     )
 
     # does not work because command hasnt been created yet
