@@ -18,8 +18,7 @@ class Snake:
             for i in range(1, body_length)
         ]
 
-        # self._last_tail = None
-        # self._move_coordinate(head, self._current_direction, -body_length - 1)
+        self._last_tail = None
 
     def _move_coordinate(self, coord, direction, i=1):
         if direction not in self._allowed_moves:
@@ -34,18 +33,18 @@ class Snake:
 
         return (coord[0] + x_dir * i, coord[1] + y_dir * i)
 
-    # def eat(self):
-    #     if self._last_tail is None:
-    #         return False
-    #     self._elements.append(self._last_tail)
-    #     self._last_tail = None
-    #     return self._elements[-1]
+    def eat(self):
+        if self._last_tail is None:
+            return False
+        self._elements.append(self._last_tail)
+        self._last_tail = None
+        return self._elements[-1]
 
     def move(self):
         self._elements.insert(
             0, self._move_coordinate(self._elements[0], self._current_direction)
         )
-        self._elements.pop()
+        self._last_tail = self._elements.pop()
 
     def set_direction(self, new_direction):
         if new_direction not in self._allowed_moves:
@@ -74,7 +73,7 @@ class Game:
         "obstacles": {(20, 5), (21, 5), (22, 5)},
         "snake_head": (25, 10),
         "snake_direction": "up",
-        "snake_length": 4,
+        "snake_length": 5,
     }
 
     maze_voxel_style = {
@@ -92,6 +91,11 @@ class Game:
         "color": (255, 0, 0, 255),
         "appearance": "Steel - Satin",
     }
+    food_voxel_style = {
+        "voxel_class": vox.DirectSphere,
+        "color": (0, 255, 0, 255),
+        "appearance": "Steel - Satin",
+    }
 
     def __init__(self, world, start_config):
         self._world = world
@@ -103,18 +107,22 @@ class Game:
 
         self._maze = set().union(
             {(i, 0) for i in range(self._width)},
-            {(i, self._height) for i in range(self._width)},
+            {(i, self._height - 1) for i in range(self._width)},
             {(0, j) for j in range(self._height)},
-            {(self._width, j) for j in range(self._height)},
+            {(self._width - 1, j) for j in range(self._height)},
             start_config["obstacles"],
         )
+        # (0,0) -> (width-1,0)
+        # (0,height-1) -> (width-1, height)
+        # (0,0) -> (0,height-1)
+        # (width-1,0) -> (width,height-1)
 
         # use list to enable the use of random.choice
         self._possible_food_positions = list(
             {
                 (i, j)
-                for i in range(1, start_config["height"] - 1)
-                for j in range(1, start_config["width"] - 1)
+                for i in range(1, self._width - 1)
+                for j in range(1, self._height - 1)
             }
             - start_config["obstacles"]
         )
@@ -129,12 +137,12 @@ class Game:
 
     def _move_snake(self):
         self._snake.move()
-        # if self._snake.head in self._maze or self._snake.head in self._snake.body:
-        #     adsk.core.Application.get().userInterface.messageBox("GAME OVER")
+        if self._snake.head in self._maze or self._snake.head in self._snake.body:
+            adsk.core.Application.get().userInterface.messageBox("GAME OVER")
 
-        # if self._snake.head == self._food:
-        #     self._snake.eat()
-        # self._food = random.choice(self._possible_food_positions)
+        if self._snake.head == self._food:
+            self._snake.eat()
+            self._food = random.choice(self._possible_food_positions)
 
     def update_world(self):
         # TODO adapt for setable drawing plane
@@ -143,6 +151,7 @@ class Game:
                 **{(*c, 0): self.maze_voxel_style for c in self._maze},
                 **{(*c, 0): self.snake_body_voxel_style for c in self._snake.body},
                 **{(*self._snake.head, 0): self.snake_head_voxel_style},
+                **{(*self._food, 0): self.food_voxel_style},
             }
         )
 
