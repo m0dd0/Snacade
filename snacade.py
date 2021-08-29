@@ -1,6 +1,7 @@
 import traceback
 import logging
 import random
+from uuid import uuid4
 
 import adsk.core, adsk.fusion, adsk.cam
 
@@ -97,8 +98,12 @@ class Game:
         "appearance": "Steel - Satin",
     }
 
-    def __init__(self, world, start_config):
+    def __init__(self, world, start_config, speed, mover_event_id):
         self._world = world
+
+        self._mover_thread = faf.utils.PeriodicExecuter(
+            speed, adsk.core.Application.get().fireCustomEvent(mover_event_id)
+        )
 
         self._height = start_config["height"]
         self._width = start_config["width"]
@@ -135,7 +140,10 @@ class Game:
 
         self._food = random.choice(self._possible_food_positions)
 
-    def _move_snake(self):
+    # def _build_start_state(self):
+    # pass
+
+    def move_snake(self):
         self._snake.move()
         if self._snake.head in self._maze or self._snake.head in self._snake.body:
             adsk.core.Application.get().userInterface.messageBox("GAME OVER")
@@ -157,28 +165,26 @@ class Game:
 
     def left(self):
         self._snake.set_direction("left")
-        self._move_snake()
 
     def right(self):
         self._snake.set_direction("right")
-        self._move_snake()
 
     def up(self):
         self._snake.set_direction("up")
-        self._move_snake()
 
     def down(self):
         self._snake.set_direction("down")
-        self._move_snake()
 
     def play(self):
-        pass
+        self._mover_thread.start()
 
     def pause(self):
-        pass
+        self._mover_thread.pause()
 
     def reset(self):
-        pass
+        self._mover_thread.reset()
+        self._mover_thread.pause()
+        # self._build_start_state()
 
     @property
     def height(self):
@@ -196,6 +202,9 @@ class Game:
 addin = None
 game = None
 
+mover_event_id = None
+command = None
+
 
 def on_execute(event_args):
     game.update_world()
@@ -206,6 +215,9 @@ def on_input_changed(event_args):
 
 
 def on_created(event_args: adsk.core.CommandCreatedEventArgs):
+    global command
+    command = event_args.command
+
     design = adsk.core.Application.get().activeDocument.design
     if design.designType == adsk.fusion.DesignTypes.ParametricDesignType:
         dialog_result = adsk.core.Application.get().userInterface.messageBox(
@@ -238,6 +250,14 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
     # but updating world / creating bodies works in creaed handler (but not in keyDown handler)
     game.update_world()
 
+    # TODO move to game instance to allow game states
+    game_speed = 1
+
+    periodic_move_thread = faf.utils.PeriodicExecuter(
+        game_speed, lambda: adsk.core.Application.get().fireCustomEvent(mover_event_id)
+    )
+    periodic_move_thread.start()
+
 
 def on_key_down(event_args: adsk.core.KeyboardEventArgs):
     {
@@ -248,6 +268,14 @@ def on_key_down(event_args: adsk.core.KeyboardEventArgs):
     }.get(event_args.keyCode, lambda: None)()
 
     event_args.firingEvent.sender.doExecute(False)
+
+
+def on_periodic_move(event_args: adsk.core.CustomEventArgs):
+    game.move_snake()
+    # game.update_world() # --> somehow ont working --> therfore:
+    # command cant be retrieved from args --> global instance necessary
+    command.doExecute(False)
+    # results in fusion work --> must be executed from custom event handler
 
 
 def run(context):
@@ -267,6 +295,8 @@ def run(context):
         tab = faf.Tab(workspace)
         panel = faf.Panel(tab)
         control = faf.Control(panel)
+        global mover_event_id
+        mover_event_id = str(uuid4())
         command = faf.AddinCommand(
             control,
             name="snacade",
@@ -274,6 +304,7 @@ def run(context):
             inputChanged=on_input_changed,
             keyDown=on_key_down,
             execute=on_execute,
+            customEventHandlers={mover_event_id: on_periodic_move},
         )
 
     except:
