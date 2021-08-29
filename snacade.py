@@ -2,6 +2,8 @@ import traceback
 import logging
 import random
 from uuid import uuid4
+from enum import auto
+from pathlib import Path
 
 import adsk.core, adsk.fusion, adsk.cam
 
@@ -98,15 +100,35 @@ class Game:
         "appearance": "Steel - Satin",
     }
 
+    # state_transitions = {
+    #     "paused": ["running", "paused"],
+    #     "running": ["paused", "game_over"],
+    #     "game_over": ["paused"],
+    # }
+
     def __init__(self, world, start_config, speed, mover_event_id):
         self._world = world
 
         self._mover_thread = faf.utils.PeriodicExecuter(
-            speed, adsk.core.Application.get().fireCustomEvent(mover_event_id)
+            speed, lambda: adsk.core.Application.get().fireCustomEvent(mover_event_id)
         )
 
-        self._height = start_config["height"]
-        self._width = start_config["width"]
+        self._state = "paused"
+
+        self._height = None
+        self._width = None
+        self._plane = None
+        self._maze = None
+        self._possible_food_positions = None
+        self._snake = None
+        self._food = None
+
+        self._start_config = start_config
+        self._build_start_state()
+
+    def _build_start_state(self):
+        self._height = self._start_config["height"]
+        self._width = self._start_config["width"]
 
         self._plane = "xy"  # TODO setable
 
@@ -115,7 +137,7 @@ class Game:
             {(i, self._height - 1) for i in range(self._width)},
             {(0, j) for j in range(self._height)},
             {(self._width - 1, j) for j in range(self._height)},
-            start_config["obstacles"],
+            self._start_config["obstacles"],
         )
         # (0,0) -> (width-1,0)
         # (0,height-1) -> (width-1, height)
@@ -129,28 +151,31 @@ class Game:
                 for i in range(1, self._width - 1)
                 for j in range(1, self._height - 1)
             }
-            - start_config["obstacles"]
+            - self._start_config["obstacles"]
         )
 
         self._snake = Snake(
-            start_config["snake_head"],
-            start_config["snake_direction"],
-            start_config["snake_length"],
+            self._start_config["snake_head"],
+            self._start_config["snake_direction"],
+            self._start_config["snake_length"],
         )
 
-        self._food = random.choice(self._possible_food_positions)
+        self._food = self._find_food_position()
 
-    # def _build_start_state(self):
-    # pass
+    def _find_food_position(self):
+        return random.choice(
+            self._possible_food_positions - {self._snake.head} - set(self._snake.body)
+        )
 
     def move_snake(self):
         self._snake.move()
         if self._snake.head in self._maze or self._snake.head in self._snake.body:
             adsk.core.Application.get().userInterface.messageBox("GAME OVER")
+            self._state = "over"
 
         if self._snake.head == self._food:
             self._snake.eat()
-            self._food = random.choice(self._possible_food_positions)
+            self._food = self._find_food_position()
 
     def update_world(self):
         # TODO adapt for setable drawing plane
@@ -176,15 +201,21 @@ class Game:
         self._snake.set_direction("down")
 
     def play(self):
-        self._mover_thread.start()
+        if self._state == "paused":
+            self._mover_thread.start()
+            self._state = "running"
 
     def pause(self):
-        self._mover_thread.pause()
+        if self._state == "running":
+            self._mover_thread.pause()
+            self._state = "paused"
 
     def reset(self):
-        self._mover_thread.reset()
-        self._mover_thread.pause()
-        # self._build_start_state()
+        if self._state in ("running", "paused", "over"):
+            self._mover_thread.reset()
+            self._mover_thread.pause()
+            self._build_start_state()
+            self._state = "paused"
 
     @property
     def height(self):
@@ -198,6 +229,10 @@ class Game:
     def plane(self):
         return self._plane
 
+    @property
+    def state(self):
+        return self._state
+
 
 addin = None
 game = None
@@ -205,19 +240,47 @@ game = None
 mover_event_id = None
 command = None
 
+made_invisible = None
+
+
+class InputIds(faf.utils.InputIdsBase):
+    ControlGroup = auto()
+    Play = auto()
+    Pause = auto()
+    Reset = auto()
+
 
 def on_execute(event_args):
     game.update_world()
 
 
-def on_input_changed(event_args):
-    pass
+def on_input_changed(event_args: adsk.core.InputChangedEventArgs):
+    {
+        InputIds.Play.value: game.play,
+        InputIds.Pause.value: game.pause,
+        InputIds.Reset.value: game.reset,
+    }.get(event_args.input.id, lambda: None)()
+
+    all_button_ids = [InputIds.Play.value, InputIds.Pause.value, InputIds.Reset.value]
+    allowed_button_ids = {
+        "paused": [InputIds.Play.value, InputIds.Reset.value],
+        "running": [InputIds.Pause.value, InputIds.Reset.value],
+        "over": [InputIds.Reset.value],
+    }[game.state]
+
+    for button_id in all_button_ids:
+        event_args.inputs.itemById(button_id).isEnabled = (
+            button_id in allowed_button_ids
+        )
+
+    command.doExecute(False)
 
 
 def on_created(event_args: adsk.core.CommandCreatedEventArgs):
     global command
     command = event_args.command
 
+    # turn of parametric mode
     design = adsk.core.Application.get().activeDocument.design
     if design.designType == adsk.fusion.DesignTypes.ParametricDesignType:
         dialog_result = adsk.core.Application.get().userInterface.messageBox(
@@ -233,12 +296,51 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
         else:
             return
 
-    event_args.command.commandInputs.addBoolValueInput("boolInputId", "my input", True)
+    # turn off visibility of all other bodies
+    global made_invisible
+    made_invisible = faf.utils.make_comp_invisible(design.rootComponent)
 
+    # configuring commadn dialog buttons
+    command.isOKButtonVisible = False
+    command.cancelButtonText = "Exit"
+
+    inputs = event_args.command.commandInputs
+
+    controls_group = inputs.addGroupCommandInput(
+        InputIds.ControlGroup.value, "Controls"
+    )
+    play_button = controls_group.children.addBoolValueInput(
+        InputIds.Play.value,
+        "Play",
+        True,
+        str(Path(__file__).parent / "resources" / "play_button"),
+        False,
+    )
+    play_button.tooltip = "Start/Continue the game."
+    pause_button = controls_group.children.addBoolValueInput(
+        InputIds.Pause.value,
+        "Pause",
+        True,
+        str(Path(__file__).parent / "resources" / "pause_button"),
+        False,
+    )
+    pause_button.tooltip = "Pause the game."
+    reset_button = controls_group.children.addBoolValueInput(
+        InputIds.Reset.value,
+        "Reset",
+        True,
+        str(Path(__file__).parent / "resources" / "redo_button"),
+        False,
+    )
+    reset_button.tooltip = "Reset the game"
+
+    # set up the game and world instacen
     world = vox.VoxelWorld(1, faf.utils.new_comp("snacade"))
+    game_speed = 1
     global game
-    game = Game(world, Game.start_config_a)
+    game = Game(world, Game.start_config_a, game_speed, mover_event_id)
 
+    # set the camera
     faf.utils.set_camera(
         plane=game.plane,
         horizontal_borders=(-1 * world.grid_size, (game.width + 1) * world.grid_size),
@@ -249,14 +351,6 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
     # event_args.command.doExecute(False)
     # but updating world / creating bodies works in creaed handler (but not in keyDown handler)
     game.update_world()
-
-    # TODO move to game instance to allow game states
-    game_speed = 1
-
-    periodic_move_thread = faf.utils.PeriodicExecuter(
-        game_speed, lambda: adsk.core.Application.get().fireCustomEvent(mover_event_id)
-    )
-    periodic_move_thread.start()
 
 
 def on_key_down(event_args: adsk.core.KeyboardEventArgs):
@@ -276,6 +370,11 @@ def on_periodic_move(event_args: adsk.core.CustomEventArgs):
     # command cant be retrieved from args --> global instance necessary
     command.doExecute(False)
     # results in fusion work --> must be executed from custom event handler
+
+
+def on_destroy(event_args):
+    game.pause()
+    game.stop()
 
 
 def run(context):
