@@ -4,6 +4,7 @@ import random
 from uuid import uuid4
 from enum import auto
 from pathlib import Path
+from queue import Queue
 
 import adsk.core, adsk.fusion, adsk.cam
 
@@ -48,6 +49,10 @@ class Snake:
             0, self._move_coordinate(self._elements[0], self._current_direction)
         )
         self._last_tail = self._elements.pop()
+
+    def undo_move(self):
+        self._elements = self._elements[1:] + [self._last_tail]
+        self._last_tail = None
 
     def set_direction(self, new_direction):
         if new_direction not in self._allowed_moves:
@@ -107,7 +112,7 @@ class Game:
     # }
 
     def __init__(self, world, start_config, speed, mover_event_id):
-        self._world = world
+        self.world = world
 
         self._mover_thread = faf.utils.PeriodicExecuter(
             speed, lambda: adsk.core.Application.get().fireCustomEvent(mover_event_id)
@@ -145,14 +150,11 @@ class Game:
         # (width-1,0) -> (width,height-1)
 
         # use list to enable the use of random.choice
-        self._possible_food_positions = list(
-            {
-                (i, j)
-                for i in range(1, self._width - 1)
-                for j in range(1, self._height - 1)
-            }
-            - self._start_config["obstacles"]
-        )
+        self._possible_food_positions = {
+            (i, j)
+            for i in range(1, self._width - 1)
+            for j in range(1, self._height - 1)
+        } - self._start_config["obstacles"]
 
         self._snake = Snake(
             self._start_config["snake_head"],
@@ -164,14 +166,24 @@ class Game:
 
     def _find_food_position(self):
         return random.choice(
-            self._possible_food_positions - {self._snake.head} - set(self._snake.body)
+            list(
+                self._possible_food_positions
+                - {self._snake.head}
+                - set(self._snake.body)
+            )
         )
 
     def move_snake(self):
         self._snake.move()
         if self._snake.head in self._maze or self._snake.head in self._snake.body:
-            adsk.core.Application.get().userInterface.messageBox("GAME OVER")
+            self._mover_thread.pause()
+            self._snake.undo_move()
             self._state = "over"
+            adsk.core.Application.get().userInterface.messageBox("GAME OVER")
+            # TODO this is very hacky, use a InputFiled class as a attribute of
+            # the game or similar
+            command.commandInputs.itemById(InputIds.Pause.value).isEnabled = False
+            command.commandInputs.itemById(InputIds.BlockSize.value).isEnabled = True
 
         if self._snake.head == self._food:
             self._snake.eat()
@@ -179,7 +191,7 @@ class Game:
 
     def update_world(self):
         # TODO adapt for setable drawing plane
-        self._world.update(
+        self.world.update(
             {
                 **{(*c, 0): self.maze_voxel_style for c in self._maze},
                 **{(*c, 0): self.snake_body_voxel_style for c in self._snake.body},
@@ -217,6 +229,9 @@ class Game:
             self._build_start_state()
             self._state = "paused"
 
+    def stop(self):
+        self._mover_thread.kill()
+
     @property
     def height(self):
         return self._height
@@ -242,19 +257,29 @@ command = None
 
 made_invisible = None
 
+execution_queue = Queue()
+
 
 class InputIds(faf.utils.InputIdsBase):
-    ControlGroup = auto()
+    ControlsGroup = auto()
     Play = auto()
     Pause = auto()
     Reset = auto()
+    SettingsGroup = auto()
+    BlockSize = auto()
+    KeepBodies = auto()
 
 
-def on_execute(event_args):
-    game.update_world()
+def on_execute(event_args: adsk.core.CommandEventArgs):
+    while not execution_queue.empty():
+        execution_queue.get()()
 
 
 def on_input_changed(event_args: adsk.core.InputChangedEventArgs):
+    inputs = event_args.firingEvent.sender.commandInputs
+    # inputs = event_args.inputs # !!! do NOT use this because of bug
+    # (will only contain inputs of the same input group)
+
     {
         InputIds.Play.value: game.play,
         InputIds.Pause.value: game.pause,
@@ -269,9 +294,28 @@ def on_input_changed(event_args: adsk.core.InputChangedEventArgs):
     }[game.state]
 
     for button_id in all_button_ids:
-        event_args.inputs.itemById(button_id).isEnabled = (
-            button_id in allowed_button_ids
+        button = inputs.itemById(button_id)
+        button.isEnabled = button_id in allowed_button_ids
+        button.value = False
+
+    inputs.itemById(InputIds.BlockSize.value).isEnabled = game.state != "running"
+
+    if event_args.input.id == InputIds.BlockSize.value:
+        execution_queue.put(game.world.clear)
+        game.world.grid_size = event_args.input.value
+        faf.utils.set_camera(
+            plane=game.plane,
+            horizontal_borders=(
+                -1 * game.world.grid_size,
+                (game.width + 1) * game.world.grid_size,
+            ),
+            vertical_borders=(
+                -1 * game.world.grid_size,
+                (game.height + 1) * game.world.grid_size,
+            ),
         )
+
+    execution_queue.put(game.update_world)
 
     command.doExecute(False)
 
@@ -307,7 +351,7 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
     inputs = event_args.command.commandInputs
 
     controls_group = inputs.addGroupCommandInput(
-        InputIds.ControlGroup.value, "Controls"
+        InputIds.ControlsGroup.value, "Controls"
     )
     play_button = controls_group.children.addBoolValueInput(
         InputIds.Play.value,
@@ -334,9 +378,28 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
     )
     reset_button.tooltip = "Reset the game"
 
+    settings_group = inputs.addGroupCommandInput(
+        InputIds.SettingsGroup.value, "Settings"
+    )
+    initial_block_size = 10
+    block_size_input = settings_group.children.addValueInput(
+        InputIds.BlockSize.value,
+        "Block size",
+        "mm",
+        adsk.core.ValueInput.createByReal(initial_block_size),
+    )
+    block_size_input.tooltip = "Side length of single block/voxel."
+    keep_blocks_input = settings_group.children.addBoolValueInput(
+        InputIds.KeepBodies.value, "Keep blocks", True, "", True
+    )
+    keep_blocks_input.tooltip = (
+        "Determines if the blocks will be kept after exiting the game."
+    )
+    settings_group.isExpanded = False
+
     # set up the game and world instacen
-    world = vox.VoxelWorld(1, faf.utils.new_comp("snacade"))
-    game_speed = 1
+    world = vox.VoxelWorld(initial_block_size, faf.utils.new_comp("snacade"))
+    game_speed = 0.5
     global game
     game = Game(world, Game.start_config_a, game_speed, mover_event_id)
 
@@ -361,20 +424,26 @@ def on_key_down(event_args: adsk.core.KeyboardEventArgs):
         adsk.core.KeyCodes.DownKeyCode: game.down,
     }.get(event_args.keyCode, lambda: None)()
 
+    execution_queue.put(game.update_world)
     event_args.firingEvent.sender.doExecute(False)
+
+
+def on_destroy(event_args: adsk.core.CommandEventArgs):
+    game.pause()
+    game.stop()
+
+    if not event_args.command.commandInputs.itemById(InputIds.KeepBodies.value).value:
+        game.world.clear()
 
 
 def on_periodic_move(event_args: adsk.core.CustomEventArgs):
     game.move_snake()
     # game.update_world() # --> somehow ont working --> therfore:
     # command cant be retrieved from args --> global instance necessary
-    command.doExecute(False)
+    if command.isValid:
+        execution_queue.put(game.update_world)
+        command.doExecute(False)
     # results in fusion work --> must be executed from custom event handler
-
-
-def on_destroy(event_args):
-    game.pause()
-    game.stop()
 
 
 def run(context):
@@ -396,13 +465,14 @@ def run(context):
         control = faf.Control(panel)
         global mover_event_id
         mover_event_id = str(uuid4())
-        command = faf.AddinCommand(
+        cmd = faf.AddinCommand(
             control,
             name="snacade",
             commandCreated=on_created,
             inputChanged=on_input_changed,
             keyDown=on_key_down,
             execute=on_execute,
+            destroy=on_destroy,
             customEventHandlers={mover_event_id: on_periodic_move},
         )
 
