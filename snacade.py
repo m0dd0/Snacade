@@ -11,6 +11,8 @@ import adsk.core, adsk.fusion, adsk.cam
 from .fusion_addin_framework import fusion_addin_framework as faf
 from .voxler import voxler as vox
 
+from .appdirs import appdirs
+
 
 class Snake:
     _allowed_moves = ["left", "right", "up", "down"]
@@ -120,6 +122,7 @@ class Game:
 
         self._state = "paused"
 
+        self._score = None
         self._height = None
         self._width = None
         self._plane = None
@@ -132,6 +135,8 @@ class Game:
         self._build_start_state()
 
     def _build_start_state(self):
+        self._score = 0
+
         self._height = self._start_config["height"]
         self._width = self._start_config["width"]
 
@@ -254,9 +259,6 @@ game = None
 
 mover_event_id = None
 command = None
-
-made_invisible = None
-
 execution_queue = Queue()
 
 
@@ -268,6 +270,8 @@ class InputIds(faf.utils.InputIdsBase):
     SettingsGroup = auto()
     BlockSize = auto()
     KeepBodies = auto()
+    HighscoresGroup = auto()
+    HighscoresHeading = auto()
 
 
 def on_execute(event_args: adsk.core.CommandEventArgs):
@@ -340,10 +344,6 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
         else:
             return
 
-    # turn off visibility of all other bodies
-    global made_invisible
-    made_invisible = faf.utils.make_comp_invisible(design.rootComponent)
-
     # configuring commadn dialog buttons
     command.isOKButtonVisible = False
     command.cancelButtonText = "Exit"
@@ -393,12 +393,34 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
         InputIds.KeepBodies.value, "Keep blocks", True, "", True
     )
     keep_blocks_input.tooltip = (
-        "Determines if the blocks will be kept after exiting the game."
+        "Determines if the blocks will be kept after leaving the game."
     )
     settings_group.isExpanded = False
 
+    highscores_group = inputs.addGroupCommandInput(
+        InputIds.HighscoresGroup.value, "Highscores"
+    )
+    highscores_group.children.addTextBoxCommandInput(
+        InputIds.HighscoresHeading.value, "Rank", "Points", 1, True
+    )
+
+    scores_path = Path(appdirs.user_state_dir("snacade")) / "highscores.json"
+    scores = faf.utils.get_json_from_file(str(scores_path), [])
+    shown_ranges = 5
+    for rank in range(shown_ranges):
+        highscores_group.children.addTextBoxCommandInput(
+            InputIds.HighscoresHeading.value + str(rank),
+            str(rank + 1),
+            str(scores[rank]) if rank < len(scores) else "-",
+            1,
+            True,
+        )
+    highscores_group.isExpanded = False
+
     # set up the game and world instacen
-    world = vox.VoxelWorld(initial_block_size, faf.utils.new_comp("snacade"))
+    comp = faf.utils.new_comp("snacade")
+    design.rootComponent.allOccurrencesByComponent(comp).item(0).activate()
+    world = vox.VoxelWorld(initial_block_size, comp)
     game_speed = 0.5
     global game
     game = Game(world, Game.start_config_a, game_speed, mover_event_id)
