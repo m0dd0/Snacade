@@ -17,9 +17,17 @@ from .appdirs import appdirs
 
 n_scores_displayed = 5
 screen_offsets = {"left": 1, "right": 1, "top": 1, "botton": 1}
-game_speed = 0.5  # TODO ake setable
+n_speed_levels = 5
+initial_speed_level = 2
+max_wait_time = 0.5
+min_wait_time = 0.1
 initial_block_size = 10
 scores_path = str(Path(appdirs.user_state_dir("snacade")) / "highscores.json")
+
+
+def level_to_time_delta(level):
+    delta_time = (max_wait_time - min_wait_time) / (n_speed_levels - 1)
+    return max_wait_time - level * delta_time
 
 
 class Snake:
@@ -131,6 +139,8 @@ class Game:
 
     def __init__(self, world, start_config, speed, mover_event_id):
         self.world = world
+
+        self._speed = speed
 
         self._mover_thread = faf.utils.PeriodicExecuter(
             speed, lambda: adsk.core.Application.get().fireCustomEvent(mover_event_id)
@@ -287,6 +297,15 @@ class Game:
     def state(self):
         return self._state
 
+    @property
+    def speed(self):
+        return self._speed
+
+    @speed.setter
+    def speed(self, new_speed):
+        self._speed = new_speed
+        self._mover_thread.interval = new_speed
+
 
 # varibale which are created in an event handler and need to be accessed from
 # different event handler(s) as well
@@ -307,6 +326,7 @@ class InputIds(faf.utils.InputIdsBase):
     KeepBodies = auto()
     HighscoresGroup = auto()
     HighscoresHeading = auto()
+    SpeedSlider = auto()
 
 
 def on_execute(event_args: adsk.core.CommandEventArgs):
@@ -353,6 +373,9 @@ def on_input_changed(event_args: adsk.core.InputChangedEventArgs):
                 (game.height + screen_offsets["top"]) * game.world.grid_size,
             ),
         )
+
+    if event_args.input.id == InputIds.SpeedSlider.value:
+        game.speed = level_to_time_delta(event_args.input.valueOne)
 
     execution_queue.put(game.update_world)
 
@@ -430,6 +453,14 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
         "Determines if the blocks will be kept after leaving the game."
     )
     settings_group.isExpanded = False
+    speed_slider = settings_group.children.addIntegerSliderListCommandInput(
+        InputIds.SpeedSlider.value,
+        "Speed",
+        list(range(n_speed_levels)),
+        False,
+    )
+    speed_slider.setText("slow", "fast")
+    speed_slider.valueOne = initial_speed_level
 
     highscores_group = inputs.addGroupCommandInput(
         InputIds.HighscoresGroup.value, "Highscores"
@@ -454,7 +485,12 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
     design.rootComponent.allOccurrencesByComponent(comp).item(0).activate()
     world = vox.VoxelWorld(initial_block_size, comp)
     global game
-    game = Game(world, Game.start_config_a, game_speed, mover_event_id)
+    game = Game(
+        world,
+        Game.start_config_a,
+        level_to_time_delta(initial_speed_level),
+        mover_event_id,
+    )
 
     # set the camera
     faf.utils.set_camera(
