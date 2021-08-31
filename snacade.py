@@ -5,6 +5,8 @@ from uuid import uuid4
 from enum import auto
 from pathlib import Path
 from queue import Queue
+import json
+import bisect
 
 import adsk.core, adsk.fusion, adsk.cam
 
@@ -12,6 +14,12 @@ from .fusion_addin_framework import fusion_addin_framework as faf
 from .voxler import voxler as vox
 
 from .appdirs import appdirs
+
+n_scores_displayed = 5
+screen_offsets = {"left": 1, "right": 1, "top": 1, "botton": 1}
+game_speed = 0.5  # TODO ake setable
+initial_block_size = 10
+scores_path = str(Path(appdirs.user_state_dir("snacade")) / "highscores.json")
 
 
 class Snake:
@@ -184,15 +192,31 @@ class Game:
             self._mover_thread.pause()
             self._snake.undo_move()
             self._state = "over"
-            adsk.core.Application.get().userInterface.messageBox("GAME OVER")
-            # TODO this is very hacky, use a InputFiled class as a attribute of
+            # TODO this is hacky, better use a InputField class as a attribute of
             # the game or similar
             command.commandInputs.itemById(InputIds.Pause.value).isEnabled = False
             command.commandInputs.itemById(InputIds.BlockSize.value).isEnabled = True
 
+            scores = faf.utils.get_json_from_file(str(scores_path), [])
+            achieved_rank = len(scores) - bisect.bisect_right(scores[::-1], self._score)
+            scores.insert(achieved_rank, self._score)
+            with open(scores_path, "w") as f:
+                json.dump(scores, f, indent=4)
+
+            if achieved_rank < n_scores_displayed:
+                msg = f"GAME OVER\n\nYou made the {faf.utils.make_ordinal(achieved_rank+1)} place in the ranking!"
+                for rank in range(n_scores_displayed):
+                    command.commandInputs.itemById(
+                        InputIds.HighscoresHeading.value + str(rank)
+                    ).text = str(scores[rank] if rank < len(scores) else "-")
+            else:
+                msg = "GAME OVER"
+            adsk.core.Application.get().userInterface.messageBox(msg)
+
         if self._snake.head == self._food:
             self._snake.eat()
             self._food = self._find_food_position()
+            self._score += 1
 
     def update_world(self):
         # TODO adapt for setable drawing plane
@@ -254,9 +278,10 @@ class Game:
         return self._state
 
 
+# varibale which are created in an event handler and need to be accessed from
+# different event handler(s) as well
 addin = None
 game = None
-
 mover_event_id = None
 command = None
 execution_queue = Queue()
@@ -310,12 +335,12 @@ def on_input_changed(event_args: adsk.core.InputChangedEventArgs):
         faf.utils.set_camera(
             plane=game.plane,
             horizontal_borders=(
-                -1 * game.world.grid_size,
-                (game.width + 1) * game.world.grid_size,
+                -screen_offsets["left"] * game.world.grid_size,
+                (game.width + screen_offsets["right"]) * game.world.grid_size,
             ),
             vertical_borders=(
-                -1 * game.world.grid_size,
-                (game.height + 1) * game.world.grid_size,
+                -screen_offsets["botton"] * game.world.grid_size,
+                (game.height + screen_offsets["top"]) * game.world.grid_size,
             ),
         )
 
@@ -381,7 +406,6 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
     settings_group = inputs.addGroupCommandInput(
         InputIds.SettingsGroup.value, "Settings"
     )
-    initial_block_size = 10
     block_size_input = settings_group.children.addValueInput(
         InputIds.BlockSize.value,
         "Block size",
@@ -404,10 +428,8 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
         InputIds.HighscoresHeading.value, "Rank", "Points", 1, True
     )
 
-    scores_path = Path(appdirs.user_state_dir("snacade")) / "highscores.json"
-    scores = faf.utils.get_json_from_file(str(scores_path), [])
-    shown_ranges = 5
-    for rank in range(shown_ranges):
+    scores = faf.utils.get_json_from_file(scores_path, [])
+    for rank in range(n_scores_displayed):
         highscores_group.children.addTextBoxCommandInput(
             InputIds.HighscoresHeading.value + str(rank),
             str(rank + 1),
@@ -421,15 +443,20 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
     comp = faf.utils.new_comp("snacade")
     design.rootComponent.allOccurrencesByComponent(comp).item(0).activate()
     world = vox.VoxelWorld(initial_block_size, comp)
-    game_speed = 0.5
     global game
     game = Game(world, Game.start_config_a, game_speed, mover_event_id)
 
     # set the camera
     faf.utils.set_camera(
         plane=game.plane,
-        horizontal_borders=(-1 * world.grid_size, (game.width + 1) * world.grid_size),
-        vertical_borders=(-1 * world.grid_size, (game.height + 1) * world.grid_size),
+        horizontal_borders=(
+            -screen_offsets["left"] * world.grid_size,
+            (game.width + screen_offsets["right"]) * world.grid_size,
+        ),
+        vertical_borders=(
+            -screen_offsets["botton"] * world.grid_size,
+            (game.height + screen_offsets["top"]) * world.grid_size,
+        ),
     )
 
     # does not work because command hasnt been created yet
