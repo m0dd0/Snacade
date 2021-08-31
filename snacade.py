@@ -33,7 +33,7 @@ def level_to_time_delta(level):
 class Snake:
     _allowed_moves = ["left", "right", "up", "down"]
 
-    def __init__(self, head, orientation, body_length):
+    def __init__(self, head, orientation, body_length, portals=(1, 1)):
         self._current_direction = orientation
         self._elements = [head] + [
             self._move_coordinate(head, self._current_direction, -i)
@@ -42,6 +42,8 @@ class Snake:
 
         self._last_tail = None
         self._direction_setable = True
+
+        self._portals = portals
 
     def _move_coordinate(self, coord, direction, i=1):
         if direction not in self._allowed_moves:
@@ -64,9 +66,9 @@ class Snake:
         return self._elements[-1]
 
     def move(self):
-        self._elements.insert(
-            0, self._move_coordinate(self._elements[0], self._current_direction)
-        )
+        new_head = self._move_coordinate(self._elements[0], self._current_direction)
+        new_head = (new_head[0] % self._portals[0], new_head[1] % self._portals[1])
+        self._elements.insert(0, new_head)
         self._last_tail = self._elements.pop()
         self._direction_setable = True
 
@@ -98,6 +100,7 @@ class Snake:
 
 class Game:
     start_config_a = {
+        "portal": True,
         "height": 20,
         "width": 50,
         "obstacles": {(20, 5), (21, 5), (22, 5)},
@@ -109,6 +112,12 @@ class Game:
     maze_voxel_style = {
         "voxel_class": vox.DirectCube,
         "color": None,
+        "appearance": "Steel - Satin",
+        "name": "maze voxel",
+    }
+    portal_voxel_style = {
+        "voxel_class": vox.DirectCube,
+        "color": (0, 120, 120, 100),
         "appearance": "Steel - Satin",
         "name": "maze voxel",
     }
@@ -153,6 +162,7 @@ class Game:
         self._width = None
         self._plane = None
         self._maze = None
+        self._portal = None
         self._possible_food_positions = None
         self._snake = None
         self._food = None
@@ -169,28 +179,36 @@ class Game:
         self._plane = "xy"  # TODO setable
 
         self._maze = set().union(
-            {(i, 0) for i in range(self._width)},
-            {(i, self._height - 1) for i in range(self._width)},
-            {(0, j) for j in range(self._height)},
-            {(self._width - 1, j) for j in range(self._height)},
             self._start_config["obstacles"],
         )
-        # (0,0) -> (width-1,0)
-        # (0,height-1) -> (width-1, height)
-        # (0,0) -> (0,height-1)
-        # (width-1,0) -> (width,height-1)
+        self._portal = set()
+
+        borders = set().union(
+            {(i, -1) for i in range(-1, self._width + 1)},
+            {(i, self._height) for i in range(-1, self._width + 1)},
+            {(-1, j) for j in range(-1, self._height + 1)},
+            {(self._width, j) for j in range(-1, self._height + 1)},
+        )
+        # (-1,-1) -> (width,0)
+        # (-1,height) -> (width, height)
+        # (-1,-1) -> (-1,height)
+        # (width,-1) -> (width,height)
+
+        if self._start_config["portal"]:
+            self._portal = self._portal.union(borders)
+        else:
+            self._maze = self._maze.union(borders)
 
         # use list to enable the use of random.choice
         self._possible_food_positions = {
-            (i, j)
-            for i in range(1, self._width - 1)
-            for j in range(1, self._height - 1)
+            (i, j) for i in range(0, self._width) for j in range(0, self._height)
         } - self._start_config["obstacles"]
 
         self._snake = Snake(
             self._start_config["snake_head"],
             self._start_config["snake_direction"],
             self._start_config["snake_length"],
+            portals=(self._width, self._height),
         )
 
         self._food = self._find_food_position()
@@ -244,6 +262,7 @@ class Game:
                 **{(*c, 0): self.snake_body_voxel_style for c in self._snake.body},
                 **{(*self._snake.head, 0): self.snake_head_voxel_style},
                 **{(*self._food, 0): self.food_voxel_style},
+                **{(*c, 0): self.portal_voxel_style for c in self._portal},
             },
             *args,
             **kwargs,
@@ -366,11 +385,11 @@ def on_input_changed(event_args: adsk.core.InputChangedEventArgs):
             plane=game.plane,
             horizontal_borders=(
                 -screen_offsets["left"] * game.world.grid_size,
-                (game.width + screen_offsets["right"]) * game.world.grid_size,
+                (game.width + 2 + screen_offsets["right"]) * game.world.grid_size,
             ),
             vertical_borders=(
                 -screen_offsets["botton"] * game.world.grid_size,
-                (game.height + screen_offsets["top"]) * game.world.grid_size,
+                (game.height + 2 + screen_offsets["top"]) * game.world.grid_size,
             ),
         )
 
@@ -483,7 +502,7 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
     # set up the game and world instacen
     comp = faf.utils.new_comp("snacade")
     design.rootComponent.allOccurrencesByComponent(comp).item(0).activate()
-    world = vox.VoxelWorld(initial_block_size, comp)
+    world = vox.VoxelWorld(initial_block_size, comp, offset=(1.5, 1.5))
     global game
     game = Game(
         world,
@@ -497,11 +516,11 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
         plane=game.plane,
         horizontal_borders=(
             -screen_offsets["left"] * world.grid_size,
-            (game.width + screen_offsets["right"]) * world.grid_size,
+            (game.width + 2 + screen_offsets["right"]) * world.grid_size,
         ),
         vertical_borders=(
             -screen_offsets["botton"] * world.grid_size,
-            (game.height + screen_offsets["top"]) * world.grid_size,
+            (game.height + 2 + screen_offsets["top"]) * world.grid_size,
         ),
     )
 
