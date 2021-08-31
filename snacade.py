@@ -98,21 +98,25 @@ class Game:
         "voxel_class": vox.DirectCube,
         "color": None,
         "appearance": "Steel - Satin",
+        "name": "maze voxel",
     }
     snake_body_voxel_style = {
         "voxel_class": vox.DirectSphere,
         "color": None,
         "appearance": "Steel - Satin",
+        "name": "snake voxel",
     }
     snake_head_voxel_style = {
         "voxel_class": vox.DirectSphere,
         "color": (255, 0, 0, 255),
         "appearance": "Steel - Satin",
+        "name": "snake voxel",
     }
     food_voxel_style = {
         "voxel_class": vox.DirectSphere,
         "color": (0, 255, 0, 255),
         "appearance": "Steel - Satin",
+        "name": "food voxel",
     }
 
     # state_transitions = {
@@ -218,7 +222,7 @@ class Game:
             self._food = self._find_food_position()
             self._score += 1
 
-    def update_world(self):
+    def update_world(self, *args, **kwargs):
         # TODO adapt for setable drawing plane
         self.world.update(
             {
@@ -226,7 +230,9 @@ class Game:
                 **{(*c, 0): self.snake_body_voxel_style for c in self._snake.body},
                 **{(*self._snake.head, 0): self.snake_head_voxel_style},
                 **{(*self._food, 0): self.food_voxel_style},
-            }
+            },
+            *args,
+            **kwargs,
         )
 
     def left(self):
@@ -462,7 +468,10 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
     # does not work because command hasnt been created yet
     # event_args.command.doExecute(False)
     # but updating world / creating bodies works in creaed handler (but not in keyDown handler)
-    game.update_world()
+    progress_dialog = adsk.core.Application.get().userInterface.createProgressDialog()
+    progress_dialog.message = "Building the world (%p%)"
+    progress_dialog.title = "Building the world"
+    game.update_world(progress_dialog)
 
 
 def on_key_down(event_args: adsk.core.KeyboardEventArgs):
