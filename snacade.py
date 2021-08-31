@@ -17,6 +17,7 @@ from .appdirs import appdirs
 
 n_scores_displayed = 5
 screen_offsets = {"left": 1, "right": 1, "top": 1, "botton": 1}
+horizontal_scaling = 1.3  # to provent overlapping of commadn inputs
 n_speed_levels = 5
 initial_speed_level = 2
 max_wait_time = 0.5
@@ -30,10 +31,26 @@ def level_to_time_delta(level):
     return max_wait_time - level * delta_time
 
 
+def set_camera(game):
+    faf.utils.set_camera(
+        plane=game.plane,
+        horizontal_borders=(
+            -screen_offsets["left"] * game.world.grid_size,
+            (game.width + screen_offsets["right"])
+            * horizontal_scaling
+            * game.world.grid_size,
+        ),
+        vertical_borders=(
+            -screen_offsets["botton"] * game.world.grid_size,
+            (game.height + screen_offsets["top"]) * game.world.grid_size,
+        ),
+    )
+
+
 class Snake:
     _allowed_moves = ["left", "right", "up", "down"]
 
-    def __init__(self, head, orientation, body_length, portals=(1, 1)):
+    def __init__(self, head, orientation, body_length, portals=None):
         self._current_direction = orientation
         self._elements = [head] + [
             self._move_coordinate(head, self._current_direction, -i)
@@ -67,7 +84,8 @@ class Snake:
 
     def move(self):
         new_head = self._move_coordinate(self._elements[0], self._current_direction)
-        new_head = (new_head[0] % self._portals[0], new_head[1] % self._portals[1])
+        if self._portals:
+            new_head = (new_head[0] % self._portals[0], new_head[1] % self._portals[1])
         self._elements.insert(0, new_head)
         self._last_tail = self._elements.pop()
         self._direction_setable = True
@@ -100,7 +118,7 @@ class Snake:
 
 class Game:
     start_config_a = {
-        "portal": True,
+        "portal": False,
         "height": 20,
         "width": 50,
         "obstacles": {(20, 5), (21, 5), (22, 5)},
@@ -208,7 +226,9 @@ class Game:
             self._start_config["snake_head"],
             self._start_config["snake_direction"],
             self._start_config["snake_length"],
-            portals=(self._width, self._height),
+            portals=(self._width, self._height)
+            if self._start_config["portal"]
+            else None,
         )
 
         self._food = self._find_food_position()
@@ -381,17 +401,7 @@ def on_input_changed(event_args: adsk.core.InputChangedEventArgs):
     if event_args.input.id == InputIds.BlockSize.value:
         execution_queue.put(game.world.clear)
         game.world.grid_size = event_args.input.value
-        faf.utils.set_camera(
-            plane=game.plane,
-            horizontal_borders=(
-                -screen_offsets["left"] * game.world.grid_size,
-                (game.width + 2 + screen_offsets["right"]) * game.world.grid_size,
-            ),
-            vertical_borders=(
-                -screen_offsets["botton"] * game.world.grid_size,
-                (game.height + 2 + screen_offsets["top"]) * game.world.grid_size,
-            ),
-        )
+        set_camera(game)
 
     if event_args.input.id == InputIds.SpeedSlider.value:
         game.speed = level_to_time_delta(event_args.input.valueOne)
@@ -512,17 +522,7 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
     )
 
     # set the camera
-    faf.utils.set_camera(
-        plane=game.plane,
-        horizontal_borders=(
-            -screen_offsets["left"] * world.grid_size,
-            (game.width + 2 + screen_offsets["right"]) * world.grid_size,
-        ),
-        vertical_borders=(
-            -screen_offsets["botton"] * world.grid_size,
-            (game.height + 2 + screen_offsets["top"]) * world.grid_size,
-        ),
-    )
+    set_camera(game)
 
     # does not work because command hasnt been created yet
     # event_args.command.doExecute(False)
