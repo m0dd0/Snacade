@@ -33,6 +33,7 @@ class Snake:
         ]
 
         self._last_tail = None
+        self._direction_setable = True
 
     def _move_coordinate(self, coord, direction, i=1):
         if direction not in self._allowed_moves:
@@ -59,6 +60,7 @@ class Snake:
             0, self._move_coordinate(self._elements[0], self._current_direction)
         )
         self._last_tail = self._elements.pop()
+        self._direction_setable = True
 
     def undo_move(self):
         self._elements = self._elements[1:] + [self._last_tail]
@@ -67,13 +69,15 @@ class Snake:
     def set_direction(self, new_direction):
         if new_direction not in self._allowed_moves:
             raise ValueError()
-        if (self._current_direction, new_direction) not in [
-            ("up", "down"),
-            ("down", "up"),
-            ("left", "right"),
-            ("right", "left"),
-        ]:
-            self._current_direction = new_direction
+        if self._direction_setable:
+            if (self._current_direction, new_direction) not in [
+                ("up", "down"),
+                ("down", "up"),
+                ("left", "right"),
+                ("right", "left"),
+            ]:
+                self._current_direction = new_direction
+                self._direction_setable = False
 
     @property
     def head(self):
