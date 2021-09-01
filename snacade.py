@@ -84,7 +84,7 @@ class Snake:
 
     def move(self):
         new_head = self._move_coordinate(self._elements[0], self._current_direction)
-        if self._portals:
+        if self._portals is not None:
             new_head = (new_head[0] % self._portals[0], new_head[1] % self._portals[1])
         self._elements.insert(0, new_head)
         self._last_tail = self._elements.pop()
@@ -117,14 +117,25 @@ class Snake:
 
 
 class Game:
-    start_config_a = {
-        "portal": False,
-        "height": 20,
-        "width": 50,
-        "obstacles": {(20, 5), (21, 5), (22, 5)},
-        "snake_head": (25, 10),
-        "snake_direction": "up",
-        "snake_length": 5,
+    start_configs = {
+        "standard": {
+            "portal": True,
+            "height": 20,
+            "width": 50,
+            "obstacles": {(20, 5), (21, 5), (22, 5)},
+            "snake_head": (25, 10),
+            "snake_direction": "up",
+            "snake_length": 5,
+        },
+        "hard borders": {
+            "portal": False,
+            "height": 20,
+            "width": 50,
+            "obstacles": {(20, 5), (21, 5), (22, 5)},
+            "snake_head": (25, 10),
+            "snake_direction": "up",
+            "snake_length": 5,
+        },
     }
 
     maze_voxel_style = {
@@ -158,12 +169,6 @@ class Game:
         "name": "food voxel",
     }
 
-    # state_transitions = {
-    #     "paused": ["running", "paused"],
-    #     "running": ["paused", "game_over"],
-    #     "game_over": ["paused"],
-    # }
-
     def __init__(self, world, start_config, speed, mover_event_id):
         self.world = world
 
@@ -173,7 +178,7 @@ class Game:
             speed, lambda: adsk.core.Application.get().fireCustomEvent(mover_event_id)
         )
 
-        self._state = "paused"
+        self._state = "start"
 
         self._score = None
         self._height = None
@@ -186,9 +191,12 @@ class Game:
         self._food = None
 
         self._start_config = start_config
-        self._build_start_state()
+        self.build_start_state()
 
-    def _build_start_state(self):
+    def build_start_state(self):
+        if self._state != "start":
+            return
+
         self._score = 0
 
         self._height = self._start_config["height"]
@@ -243,6 +251,8 @@ class Game:
         )
 
     def move_snake(self):
+        if self._state != "running":
+            return
         self._snake.move()
         if self._snake.head in self._maze or self._snake.head in self._snake.body:
             self._mover_thread.pause()
@@ -289,19 +299,23 @@ class Game:
         )
 
     def left(self):
-        self._snake.set_direction("left")
+        if self._state == "running":
+            self._snake.set_direction("left")
 
     def right(self):
-        self._snake.set_direction("right")
+        if self._state == "running":
+            self._snake.set_direction("right")
 
     def up(self):
-        self._snake.set_direction("up")
+        if self._state == "running":
+            self._snake.set_direction("up")
 
     def down(self):
-        self._snake.set_direction("down")
+        if self._state == "running":
+            self._snake.set_direction("down")
 
     def play(self):
-        if self._state == "paused":
+        if self._state in ["paused", "start"]:
             self._mover_thread.start()
             self._state = "running"
 
@@ -311,11 +325,11 @@ class Game:
             self._state = "paused"
 
     def reset(self):
-        if self._state in ("running", "paused", "over"):
+        if self._state in ("running", "paused", "over", "start"):
             self._mover_thread.reset()
             self._mover_thread.pause()
-            self._build_start_state()
-            self._state = "paused"
+            self._state = "start"
+            self.build_start_state()
 
     def stop(self):
         self._mover_thread.kill()
@@ -345,6 +359,14 @@ class Game:
         self._speed = new_speed
         self._mover_thread.interval = new_speed
 
+    @property
+    def start_config(self):
+        return self._start_config.copy()
+
+    @start_config.setter
+    def start_config(self, new_start_config):
+        self._start_config = new_start_config
+
 
 # varibale which are created in an event handler and need to be accessed from
 # different event handler(s) as well
@@ -366,6 +388,7 @@ class InputIds(faf.utils.InputIdsBase):
     HighscoresGroup = auto()
     HighscoresHeading = auto()
     SpeedSlider = auto()
+    MazeDropdown = auto()
 
 
 def on_execute(event_args: adsk.core.CommandEventArgs):
@@ -389,6 +412,7 @@ def on_input_changed(event_args: adsk.core.InputChangedEventArgs):
         "paused": [InputIds.Play.value, InputIds.Reset.value],
         "running": [InputIds.Pause.value, InputIds.Reset.value],
         "over": [InputIds.Reset.value],
+        "start": [InputIds.Play.value, InputIds.Reset.value],
     }[game.state]
 
     for button_id in all_button_ids:
@@ -405,6 +429,12 @@ def on_input_changed(event_args: adsk.core.InputChangedEventArgs):
 
     if event_args.input.id == InputIds.SpeedSlider.value:
         game.speed = level_to_time_delta(event_args.input.valueOne)
+
+    inputs.itemById(InputIds.MazeDropdown.value).isEnabled = game.state == "start"
+
+    if event_args.input.id == InputIds.MazeDropdown.value:
+        game.start_config = Game.start_configs[event_args.input.selectedItem.name]
+        game.build_start_state()
 
     execution_queue.put(game.update_world)
 
@@ -437,6 +467,42 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
 
     inputs = event_args.command.commandInputs
 
+    settings_group = inputs.addGroupCommandInput(
+        InputIds.SettingsGroup.value, "Settings"
+    )
+    maze_dropdown = settings_group.children.addDropDownCommandInput(
+        InputIds.MazeDropdown.value,
+        "World",
+        adsk.core.DropDownStyles.TextListDropDownStyle,
+    )
+    for maze_name in Game.start_configs.keys():
+        maze_dropdown.listItems.add(maze_name, False)
+    maze_dropdown.listItems.item(0).isSelected = True
+    initial_maze = maze_dropdown.listItems.item(0).name
+
+    speed_slider = settings_group.children.addIntegerSliderListCommandInput(
+        InputIds.SpeedSlider.value,
+        "Speed",
+        list(range(n_speed_levels)),
+        False,
+    )
+    speed_slider.setText("slow", "fast")
+    speed_slider.valueOne = initial_speed_level
+    block_size_input = settings_group.children.addValueInput(
+        InputIds.BlockSize.value,
+        "Block size",
+        "mm",
+        adsk.core.ValueInput.createByReal(initial_block_size),
+    )
+    block_size_input.tooltip = "Side length of single block/voxel."
+    keep_blocks_input = settings_group.children.addBoolValueInput(
+        InputIds.KeepBodies.value, "Keep blocks", True, "", True
+    )
+    keep_blocks_input.tooltip = (
+        "Determines if the blocks will be kept after leaving the game."
+    )
+    # settings_group.isExpanded = False
+
     controls_group = inputs.addGroupCommandInput(
         InputIds.ControlsGroup.value, "Controls"
     )
@@ -456,6 +522,7 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
         False,
     )
     pause_button.tooltip = "Pause the game."
+    pause_button.isEnabled = False
     reset_button = controls_group.children.addBoolValueInput(
         InputIds.Reset.value,
         "Reset",
@@ -464,32 +531,6 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
         False,
     )
     reset_button.tooltip = "Reset the game"
-
-    settings_group = inputs.addGroupCommandInput(
-        InputIds.SettingsGroup.value, "Settings"
-    )
-    block_size_input = settings_group.children.addValueInput(
-        InputIds.BlockSize.value,
-        "Block size",
-        "mm",
-        adsk.core.ValueInput.createByReal(initial_block_size),
-    )
-    block_size_input.tooltip = "Side length of single block/voxel."
-    keep_blocks_input = settings_group.children.addBoolValueInput(
-        InputIds.KeepBodies.value, "Keep blocks", True, "", True
-    )
-    keep_blocks_input.tooltip = (
-        "Determines if the blocks will be kept after leaving the game."
-    )
-    settings_group.isExpanded = False
-    speed_slider = settings_group.children.addIntegerSliderListCommandInput(
-        InputIds.SpeedSlider.value,
-        "Speed",
-        list(range(n_speed_levels)),
-        False,
-    )
-    speed_slider.setText("slow", "fast")
-    speed_slider.valueOne = initial_speed_level
 
     highscores_group = inputs.addGroupCommandInput(
         InputIds.HighscoresGroup.value, "Highscores"
@@ -516,7 +557,7 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
     global game
     game = Game(
         world,
-        Game.start_config_a,
+        Game.start_configs[initial_maze],
         level_to_time_delta(initial_speed_level),
         mover_event_id,
     )
