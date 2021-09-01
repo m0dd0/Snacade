@@ -315,7 +315,7 @@ class Game:
             self._snake.set_direction("down")
 
     def play(self):
-        if self._state in ["paused", "start"]:
+        if self._state in ("paused", "start"):
             self._mover_thread.start()
             self._state = "running"
 
@@ -619,8 +619,8 @@ def run(context):
         addin = faf.FusionAddin()
         workspace = faf.Workspace(addin)
         tab = faf.Tab(workspace)
-        panel = faf.Panel(tab)
-        control = faf.Control(panel)
+        panel = faf.Panel(tab, id="FunPanelId", name="Fun")
+        control = faf.Control(panel, isPromoted=True, isPromotedByDefault=True)
         global mover_event_id
         mover_event_id = str(uuid4())
         cmd = faf.AddinCommand(
