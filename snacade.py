@@ -47,6 +47,24 @@ def set_camera(game):
     )
 
 
+def zigzag_obstacle_generator(height, width, n_zigzags, zizag_portion, vertical=True):
+    if not vertical:
+        height, width = width, height
+
+    obstacles = set()
+    d = int(width / (n_zigzags + 1))
+    up = True
+    for i in range(n_zigzags):
+        x = int(d + i * d)
+        for y in range(0, int(height * zizag_portion)):
+            if up:
+                obstacles.add((x, y))
+            else:
+                obstacles.add((x, height - 1 - y))
+        up = not up
+    return obstacles
+
+
 class Snake:
     _allowed_moves = ["left", "right", "up", "down"]
 
@@ -132,6 +150,15 @@ class Game:
             "height": 20,
             "width": 50,
             "obstacles": {(20, 5), (21, 5), (22, 5)},
+            "snake_head": (25, 10),
+            "snake_direction": "up",
+            "snake_length": 5,
+        },
+        "zigzag": {
+            "portal": False,
+            "height": 20,
+            "width": 50,
+            "obstacles": zigzag_obstacle_generator(20, 50, 3, 0.5),
             "snake_head": (25, 10),
             "snake_direction": "up",
             "snake_length": 5,
