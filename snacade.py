@@ -16,8 +16,8 @@ from .voxler import voxler as vox
 from .appdirs import appdirs
 
 n_scores_displayed = 5
-screen_offsets = {"left": 1, "right": 1, "top": 1, "botton": 1}
-horizontal_scaling = 1.3  # to provent overlapping of commadn inputs
+screen_offsets = {"left": 3, "right": 1, "top": 4, "botton": 3}
+horizontal_scaling = 1.2  # to provent overlapping of commadn inputs
 n_speed_levels = 5
 initial_speed_level = 2
 max_wait_time = 0.5
@@ -48,20 +48,55 @@ def set_camera(game):
 
 
 def zigzag_obstacle_generator(height, width, n_zigzags, zizag_portion, vertical=True):
-    if not vertical:
-        height, width = width, height
-
     obstacles = set()
-    d = int(width / (n_zigzags + 1))
-    up = True
-    for i in range(n_zigzags):
-        x = int(d + i * d)
-        for y in range(0, int(height * zizag_portion)):
-            if up:
-                obstacles.add((x, y))
-            else:
-                obstacles.add((x, height - 1 - y))
-        up = not up
+    if vertical:
+        d = int(width / (n_zigzags + 1))
+        up = True
+        for i in range(n_zigzags):
+            x = int(d + i * d)
+            for y in range(0, int(height * zizag_portion)):
+                if up:
+                    obstacles.add((x, y))
+                else:
+                    obstacles.add((x, height - 1 - y))
+            up = not up
+    else:
+        d = int(height / (n_zigzags + 1))
+        up = True
+        for i in range(n_zigzags):
+            y = int(d + i * d)
+            for x in range(0, int(width * zizag_portion)):
+                if up:
+                    obstacles.add((x, y))
+                else:
+                    obstacles.add((width - 1 - x, y))
+            up = not up
+
+    return obstacles
+
+
+def random_obstacle_generator(height, width, n_obstacles, snake_head):
+    obstacles = set()
+    while len(obstacles) < n_obstacles:
+        new_obst = (random.randint(0, width), random.randint(0, height))
+        if abs(snake_head[0] - new_obst[0]) > 5 and abs(snake_head[1] - new_obst[1]):
+            obstacles.add(new_obst)
+    # obst_x, obst_y = obstacle_size
+    # if random.choice((True, False)):
+    #     obst_x, obst_y = obst_y, obst_x
+    # obstacles = set()
+    # n_obst_created = 0
+    # while n_obst_created < n_obstacles:
+    #     obst_start = (random.randint(0, width), random.randint(0, height))
+    #     created = False
+    #     for x in range(obst_x):
+    #         for y in range(obst_y):
+    #             obst = (obst_start[0] + x, obst_start[0] + y)
+    #             if 0 < obst[0] < width and 0 < obst[1] < height:
+    #                 obstacles.add(obst)
+    #                 created = True
+    #     if created:
+    #         n_obst_created += 1
     return obstacles
 
 
@@ -138,28 +173,55 @@ class Game:
     start_configs = {
         "standard": {
             "portal": True,
-            "height": 20,
+            "height": 25,
             "width": 50,
-            "obstacles": {(20, 5), (21, 5), (22, 5)},
-            "snake_head": (25, 10),
-            "snake_direction": "up",
+            "obstacles": set(),  # {(20, 5), (21, 5), (22, 5)},
+            "snake_head": (27, 12),
+            "snake_direction": "right",
             "snake_length": 5,
         },
-        "hard borders": {
+        "frame": {
             "portal": False,
-            "height": 20,
+            "height": 25,
             "width": 50,
-            "obstacles": {(20, 5), (21, 5), (22, 5)},
-            "snake_head": (25, 10),
-            "snake_direction": "up",
+            "obstacles": set(),  # {(20, 5), (21, 5), (22, 5)},
+            "snake_head": (27, 12),
+            "snake_direction": "right",
             "snake_length": 5,
         },
         "zigzag": {
             "portal": False,
-            "height": 20,
+            "height": 25,
             "width": 50,
-            "obstacles": zigzag_obstacle_generator(20, 50, 3, 0.5),
-            "snake_head": (25, 10),
+            "obstacles": zigzag_obstacle_generator(25, 50, 3, 0.7),
+            "snake_head": (5, 10),
+            "snake_direction": "up",
+            "snake_length": 5,
+        },
+        "zigzag horizontal": {
+            "portal": False,
+            "height": 25,
+            "width": 50,
+            "obstacles": zigzag_obstacle_generator(25, 50, 3, 0.7, vertical=False),
+            "snake_head": (10, 22),
+            "snake_direction": "rigth",
+            "snake_length": 5,
+        },
+        "random obstacles frame": {
+            "portal": True,
+            "height": 25,
+            "width": 50,
+            "obstacles": random_obstacle_generator(25, 50, 35, (5, 10)),
+            "snake_head": (5, 10),
+            "snake_direction": "up",
+            "snake_length": 5,
+        },
+        "random obstacles": {
+            "portal": False,
+            "height": 25,
+            "width": 50,
+            "obstacles": random_obstacle_generator(25, 50, 35, (5, 10)),
+            "snake_head": (5, 10),
             "snake_direction": "up",
             "snake_length": 5,
         },
@@ -399,6 +461,7 @@ class Game:
 # different event handler(s) as well
 addin = None
 game = None
+comp = None
 mover_event_id = None
 command = None
 execution_queue = Queue()
@@ -578,6 +641,7 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
     highscores_group.isExpanded = False
 
     # set up the game and world instacen
+    global comp
     comp = faf.utils.new_comp("snacade")
     design.rootComponent.allOccurrencesByComponent(comp).item(0).activate()
     world = vox.VoxelWorld(initial_block_size, comp, offset=(1.5, 1.5))
@@ -618,7 +682,8 @@ def on_destroy(event_args: adsk.core.CommandEventArgs):
     game.stop()
 
     if not event_args.command.commandInputs.itemById(InputIds.KeepBodies.value).value:
-        game.world.clear()
+        # game.world.clear()
+        faf.utils.delete_comp(comp)
 
 
 def on_periodic_move(event_args: adsk.core.CustomEventArgs):
