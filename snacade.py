@@ -175,7 +175,7 @@ class Game:
             "portal": True,
             "height": 25,
             "width": 50,
-            "obstacles": set(),  # {(20, 5), (21, 5), (22, 5)},
+            "obstacles": set(),
             "snake_head": (27, 12),
             "snake_direction": "right",
             "snake_length": 5,
@@ -184,7 +184,7 @@ class Game:
             "portal": False,
             "height": 25,
             "width": 50,
-            "obstacles": set(),  # {(20, 5), (21, 5), (22, 5)},
+            "obstacles": set(),
             "snake_head": (27, 12),
             "snake_direction": "right",
             "snake_length": 5,
@@ -204,10 +204,10 @@ class Game:
             "width": 50,
             "obstacles": zigzag_obstacle_generator(25, 50, 3, 0.7, vertical=False),
             "snake_head": (10, 22),
-            "snake_direction": "rigth",
+            "snake_direction": "right",
             "snake_length": 5,
         },
-        "random obstacles frame": {
+        "random obstacles": {
             "portal": True,
             "height": 25,
             "width": 50,
@@ -216,7 +216,7 @@ class Game:
             "snake_direction": "up",
             "snake_length": 5,
         },
-        "random obstacles": {
+        "random obstacles frame": {
             "portal": False,
             "height": 25,
             "width": 50,
@@ -235,13 +235,13 @@ class Game:
     }
     portal_voxel_style = {
         "voxel_class": vox.DirectCube,
-        "color": (0, 120, 120, 100),
+        "color": (0, 0, 255, 255),
         "appearance": "Steel - Satin",
         "name": "maze voxel",
     }
     snake_body_voxel_style = {
         "voxel_class": vox.DirectSphere,
-        "color": None,
+        "color": (0, 255, 0, 255),
         "appearance": "Steel - Satin",
         "name": "snake voxel",
     }
@@ -253,7 +253,7 @@ class Game:
     }
     food_voxel_style = {
         "voxel_class": vox.DirectSphere,
-        "color": (0, 255, 0, 255),
+        "color": (255, 255, 0, 255),
         "appearance": "Steel - Satin",
         "name": "food voxel",
     }
