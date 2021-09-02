@@ -358,14 +358,13 @@ class Game:
             with open(scores_path, "w") as f:
                 json.dump(scores, f, indent=4)
 
+            msg = f"GAME OVER\n\nYour snake ate {self._score} snacks."
             if achieved_rank < n_scores_displayed:
-                msg = f"GAME OVER\n\nYou made the {faf.utils.make_ordinal(achieved_rank+1)} place in the ranking!"
+                msg += f"\n\nCongratulations, you made the {faf.utils.make_ordinal(achieved_rank+1)} place in the ranking!"
                 for rank in range(n_scores_displayed):
                     command.commandInputs.itemById(
                         InputIds.HighscoresHeading.value + str(rank)
                     ).text = str(scores[rank] if rank < len(scores) else "-")
-            else:
-                msg = "GAME OVER"
             adsk.core.Application.get().userInterface.messageBox(msg)
 
         if self._snake.head == self._food:
