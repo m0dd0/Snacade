@@ -15,6 +15,7 @@ from .voxler import voxler as vox
 
 from .appdirs import appdirs
 
+### GLOBALS ###
 n_scores_displayed = 5
 screen_offsets = {"left": 3, "right": 1, "top": 4, "botton": 3}
 horizontal_scaling = 1.2  # to provent overlapping of commadn inputs
@@ -26,6 +27,7 @@ initial_block_size = 10
 scores_path = str(Path(appdirs.user_state_dir("snacade")) / "highscores.json")
 
 
+### HELPER FUNCTIONS ###
 def level_to_time_delta(level):
     delta_time = (max_wait_time - min_wait_time) / (n_speed_levels - 1)
     return max_wait_time - level * delta_time
@@ -81,25 +83,10 @@ def random_obstacle_generator(height, width, n_obstacles, snake_head):
         new_obst = (random.randint(0, width), random.randint(0, height))
         if abs(snake_head[0] - new_obst[0]) > 5 and abs(snake_head[1] - new_obst[1]):
             obstacles.add(new_obst)
-    # obst_x, obst_y = obstacle_size
-    # if random.choice((True, False)):
-    #     obst_x, obst_y = obst_y, obst_x
-    # obstacles = set()
-    # n_obst_created = 0
-    # while n_obst_created < n_obstacles:
-    #     obst_start = (random.randint(0, width), random.randint(0, height))
-    #     created = False
-    #     for x in range(obst_x):
-    #         for y in range(obst_y):
-    #             obst = (obst_start[0] + x, obst_start[0] + y)
-    #             if 0 < obst[0] < width and 0 < obst[1] < height:
-    #                 obstacles.add(obst)
-    #                 created = True
-    #     if created:
-    #         n_obst_created += 1
     return obstacles
 
 
+### GAME LOGIC ###
 class Snake:
     _allowed_moves = ["left", "right", "up", "down"]
 
@@ -456,6 +443,7 @@ class Game:
         self._start_config = new_start_config
 
 
+### INTER HANDLER SHARED VARIABLES ###
 # varibale which are created in an event handler and need to be accessed from
 # different event handler(s) as well
 addin = None
@@ -480,6 +468,7 @@ class InputIds(faf.utils.InputIdsBase):
     MazeDropdown = auto()
 
 
+### HANDLERS ###
 def on_execute(event_args: adsk.core.CommandEventArgs):
     while not execution_queue.empty():
         execution_queue.get()()
@@ -695,6 +684,7 @@ def on_periodic_move(event_args: adsk.core.CustomEventArgs):
     # results in fusion work --> must be executed from custom event handler
 
 
+### ENTRY POINT ###
 def run(context):
     ui = None
     try:
