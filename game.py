@@ -6,48 +6,6 @@ from .voxler import voxler as vox
 from .fusion_addin_framework import fusion_addin_framework as faf
 
 
-def zigzag_obstacle_generator(height, width, n_zigzags, zizag_portion, vertical=True):
-    obstacles = set()
-    if vertical:
-        d = int(width / (n_zigzags + 1))
-        up = True
-        for i in range(n_zigzags):
-            x = int(d + i * d)
-            for y in range(0, int(height * zizag_portion)):
-                if up:
-                    obstacles.add((x, y))
-                else:
-                    obstacles.add((x, height - 1 - y))
-            up = not up
-    else:
-        d = int(height / (n_zigzags + 1))
-        up = True
-        for i in range(n_zigzags):
-            y = int(d + i * d)
-            for x in range(0, int(width * zizag_portion)):
-                if up:
-                    obstacles.add((x, y))
-                else:
-                    obstacles.add((width - 1 - x, y))
-            up = not up
-
-    return obstacles
-
-
-def random_obstacle_generator(height, width, n_obstacles, snake_head):
-    obstacles = set()
-    while len(obstacles) < n_obstacles:
-        new_obst = (random.randint(0, width), random.randint(0, height))
-        if abs(snake_head[0] - new_obst[0]) > 5 and abs(snake_head[1] - new_obst[1]):
-            obstacles.add(new_obst)
-    return obstacles
-
-
-def level_to_time_delta(level):
-    delta_time = (max_wait_time - min_wait_time) / (n_speed_levels - 1)
-    return max_wait_time - level * delta_time
-
-
 class Snake:
     _allowed_moves = ["left", "right", "up", "down"]
 
@@ -118,6 +76,47 @@ class Snake:
 
 
 class Game:
+    @staticmethod
+    def zigzag_obstacle_generator(
+        height, width, n_zigzags, zizag_portion, vertical=True
+    ):
+        obstacles = set()
+        if vertical:
+            d = int(width / (n_zigzags + 1))
+            up = True
+            for i in range(n_zigzags):
+                x = int(d + i * d)
+                for y in range(0, int(height * zizag_portion)):
+                    if up:
+                        obstacles.add((x, y))
+                    else:
+                        obstacles.add((x, height - 1 - y))
+                up = not up
+        else:
+            d = int(height / (n_zigzags + 1))
+            up = True
+            for i in range(n_zigzags):
+                y = int(d + i * d)
+                for x in range(0, int(width * zizag_portion)):
+                    if up:
+                        obstacles.add((x, y))
+                    else:
+                        obstacles.add((width - 1 - x, y))
+                up = not up
+
+        return obstacles
+
+    @staticmethod
+    def random_obstacle_generator(height, width, n_obstacles, snake_head):
+        obstacles = set()
+        while len(obstacles) < n_obstacles:
+            new_obst = (random.randint(0, width), random.randint(0, height))
+            if abs(snake_head[0] - new_obst[0]) > 5 and abs(
+                snake_head[1] - new_obst[1]
+            ):
+                obstacles.add(new_obst)
+        return obstacles
+
     start_configs = {
         "standard": {
             "portal": True,
@@ -141,7 +140,7 @@ class Game:
             "portal": False,
             "height": 25,
             "width": 50,
-            "obstacles": zigzag_obstacle_generator(25, 50, 3, 0.7),
+            "obstacles": Game.zigzag_obstacle_generator(25, 50, 3, 0.7),
             "snake_head": (5, 10),
             "snake_direction": "up",
             "snake_length": 5,
@@ -150,7 +149,7 @@ class Game:
             "portal": False,
             "height": 25,
             "width": 50,
-            "obstacles": zigzag_obstacle_generator(25, 50, 3, 0.7, vertical=False),
+            "obstacles": Game.zigzag_obstacle_generator(25, 50, 3, 0.7, vertical=False),
             "snake_head": (10, 22),
             "snake_direction": "right",
             "snake_length": 5,
@@ -159,7 +158,7 @@ class Game:
             "portal": True,
             "height": 25,
             "width": 50,
-            "obstacles": random_obstacle_generator(25, 50, 35, (5, 10)),
+            "obstacles": Game.random_obstacle_generator(25, 50, 35, (5, 10)),
             "snake_head": (5, 10),
             "snake_direction": "up",
             "snake_length": 5,
@@ -168,7 +167,7 @@ class Game:
             "portal": False,
             "height": 25,
             "width": 50,
-            "obstacles": random_obstacle_generator(25, 50, 35, (5, 10)),
+            "obstacles": Game.random_obstacle_generator(25, 50, 35, (5, 10)),
             "snake_head": (5, 10),
             "snake_direction": "up",
             "snake_length": 5,
@@ -206,15 +205,21 @@ class Game:
         "additional_properties": {"name": "food voxel"},
     }
 
-    def __init__(self, world, game_ui, mover_event_id):
+    def __init__(
+        self, world, game_ui, mover_event_id, min_move_time_delta, max_move_time_delta
+    ):
         self._world = world
         self._game_ui = game_ui
 
-        # TODO rename speed -> move_time_delta
-        self._speed = level_to_time_delta(self._game_ui.speedSlider.valueOne)
+        self._min_move_time_delta = min_move_time_delta
+        self._max_move_time_delta = max_move_time_delta
+        self._speed = None
+        self._move_time_delta = None
+        self.speed = self._game_ui.speedSlider.valueOne
 
         self._mover_thread = faf.utils.PeriodicExecuter(
-            speed, lambda: adsk.core.Application.get().fireCustomEvent(mover_event_id)
+            self._move_time_delta,
+            lambda: adsk.core.Application.get().fireCustomEvent(mover_event_id),
         )
 
         self._state = "start"
@@ -232,10 +237,12 @@ class Game:
         self.build_start_state()
 
     def build_start_state(self):
-        if self._state != "start":
+        if self.state != "start":
             return
 
-        start_config = self._game_ui.maze_dropdown.listItems.selectedItem.name
+        start_config = self.start_configs[
+            self._game_ui.maze_dropdown.listItems.selectedItem.name
+        ]
 
         self._score = 0
 
@@ -260,7 +267,7 @@ class Game:
         # (-1,-1) -> (-1,height)
         # (width,-1) -> (width,height)
 
-        if self._start_config["portal"]:
+        if start_config["portal"]:
             self._portal = self._portal.union(borders)
         else:
             self._maze = self._maze.union(borders)
@@ -274,9 +281,7 @@ class Game:
             start_config["snake_head"],
             start_config["snake_direction"],
             start_config["snake_length"],
-            portals=(self._width, self._height)
-            if self._start_config["portal"]
-            else None,
+            portals=(self._width, self._height) if start_config["portal"] else None,
         )
 
         self._food = self._find_food_position()
@@ -291,33 +296,15 @@ class Game:
         )
 
     def move_snake(self):
-        if self._state != "running":
+        if self.state != "running":
             return
         self._snake.move()
         if self._snake.head in self._maze or self._snake.head in self._snake.body:
             self._mover_thread.pause()
             self._snake.undo_move()
-            self._state = "over"
+            self.state = "over"
             # TODO port to game ui class
-            self._game_ui.game_over_state(self._score)
-            # command.commandInputs.itemById(InputIds.Pause.value).isEnabled = False
-            # command.commandInputs.itemById(InputIds.BlockSize.value).isEnabled = True
-
-            # scores = faf.utils.get_json_from_file(str(scores_path), [])
-            # achieved_rank = len(scores) - bisect.bisect_right(scores[::-1], self._score)
-            # scores.insert(achieved_rank, self._score)
-            # with open(scores_path, "w") as f:
-            #     json.dump(scores, f, indent=4)
-
-            # msg = f"GAME OVER\n\nYour snake ate {self._score} snacks."
-            # if achieved_rank < n_scores_displayed:
-            #     msg += f"\n\nCongratulations, you made the {faf.utils.make_ordinal(achieved_rank+1)} place in the ranking!"
-            #     self.control_board.update_leaderboard()
-            #     # for rank in range(n_scores_displayed):
-            #     #     command.commandInputs.itemById(
-            #     #         InputIds.HighscoresHeading.value + str(rank)
-            #     #     ).text = str(scores[rank] if rank < len(scores) else "-")
-            # adsk.core.Application.get().userInterface.messageBox(msg)
+            self._game_ui.update_scores(self._score)
 
         if self._snake.head == self._food:
             self._snake.eat()
@@ -358,18 +345,18 @@ class Game:
     def play(self):
         if self._state in ("paused", "start"):
             self._mover_thread.start()
-            self._state = "running"
+            self.state = "running"
 
     def pause(self):
         if self._state == "running":
             self._mover_thread.pause()
-            self._state = "paused"
+            self.state = "paused"
 
     def reset(self):
         if self._state in ("running", "paused", "over", "start"):
             self._mover_thread.reset()
             self._mover_thread.pause()
-            self._state = "start"
+            self.state = "start"
             self.build_start_state()
 
     def stop(self):
@@ -388,8 +375,12 @@ class Game:
         return self._plane
 
     @property
-    def state(self):
-        return self._state
+    def game_ui(self):
+        return self._game_ui
+
+    @property
+    def world(self):
+        return self._world
 
     @property
     def speed(self):
@@ -398,7 +389,11 @@ class Game:
     @speed.setter
     def speed(self, new_speed):
         self._speed = new_speed
-        self._mover_thread.interval = new_speed
+        delta_time = (self._max_move_time_delta - self._min_move_time_delta) / (
+            self._game_ui.n_speed_levels - 1
+        )
+        self._move_time_delta = self._max_move_time_delta - new_speed * delta_time
+        self._mover_thread.interval = self._move_time_delta
 
     @property
     def state(self):
@@ -407,4 +402,4 @@ class Game:
     @state.setter
     def state(self, new_state):
         self._state = new_state
-        self._game_ui.change_state(new_state, self)
+        self._game_ui.change_state(new_state)

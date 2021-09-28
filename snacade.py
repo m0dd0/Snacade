@@ -1,12 +1,8 @@
 import traceback
 import logging
-import random
 from uuid import uuid4
-from enum import auto
 from pathlib import Path
 from queue import Queue
-import json
-import bisect
 
 import adsk.core, adsk.fusion, adsk.cam
 
@@ -16,31 +12,33 @@ from .voxler import voxler as vox
 from .appdirs import appdirs
 
 from game import Game
+from ui import GameUI, InputIds
 
-### GLOBALS ###
-n_scores_displayed = 5
-screen_offsets = {"left": 3, "right": 1, "top": 4, "botton": 3}
-horizontal_scaling = 1.2  # to provent overlapping of commadn inputs
-n_speed_levels = 5
-initial_speed_level = 2
-max_wait_time = 0.5
-min_wait_time = 0.1
-initial_block_size = 10
-scores_path = str(Path(appdirs.user_state_dir("snacade")) / "highscores.json")
+### GLOBALS (Settings) ###
+N_SCORES_DISPLAYED = 5
+SCORES_PATH = str(Path(appdirs.user_state_dir("snacade")) / "highscores.json")
+N_SPEED_LEVELS = 5
+INITIAL_SPEED_LEVEL = 2
+INITIAL_BLOCK_SIZE = 10
+NO_SCORE_SYMBOL = "-"
+
+MIN_MOVE_WAIT_TIME = 0.1
+MAX_MOVE_WAIT_TIME = 0.5
+
+SCREEN_OFFSETS = {"left": 3, "right": 1, "top": 4, "botton": 3}
+HORZIONTAL_SCALING = 1.2  # to provent overlapping of commadn inputs
 
 
-def set_camera(game):
+def _set_camera(height, width, grid_size, plane):
     faf.utils.set_camera(
-        plane=game.plane,
+        plane=plane,
         horizontal_borders=(
-            -screen_offsets["left"] * game.world.grid_size,
-            (game.width + screen_offsets["right"])
-            * horizontal_scaling
-            * game.world.grid_size,
+            -SCREEN_OFFSETS["left"] * grid_size,
+            (width + SCREEN_OFFSETS["right"]) * HORZIONTAL_SCALING * grid_size,
         ),
         vertical_borders=(
-            -screen_offsets["botton"] * game.world.grid_size,
-            (game.height + screen_offsets["top"]) * game.world.grid_size,
+            -SCREEN_OFFSETS["botton"] * grid_size,
+            (height + SCREEN_OFFSETS["top"]) * grid_size,
         ),
     )
 
@@ -51,186 +49,13 @@ def set_camera(game):
 addin = None
 game = None
 command = None
+comp = None
 mover_event_id = None
 execution_queue = Queue()
 
 
-class InputIds(faf.utils.InputIdsBase):
-    ControlsGroup = auto()
-    Play = auto()
-    Pause = auto()
-    Reset = auto()
-    SettingsGroup = auto()
-    BlockSize = auto()
-    KeepBodies = auto()
-    HighscoresGroup = auto()
-    HighscoresHeading = auto()
-    SpeedSlider = auto()
-    MazeDropdown = auto()
-
-
-class GameUI:
-    def __init__(self, command):
-        self.command = command
-
-        command.isOKButtonVisible = False
-        command.cancelButtonText = "Exit"
-
-        self._create_controls_group()
-        self._create_settings_group()
-        self._create_highscores_group()
-
-    def _create_settings_group(self):
-        self.settings_group = self.command.commandInputs.addGroupCommandInput(
-            InputIds.SettingsGroup.value, "Settings"
-        )
-
-        self.maze_dropdown = self.settings_group.children.addDropDownCommandInput(
-            InputIds.MazeDropdown.value,
-            "World",
-            adsk.core.DropDownStyles.TextListDropDownStyle,
-        )
-        for maze_name in Game.start_configs.keys():
-            self.maze_dropdown.listItems.add(maze_name, False)
-        self.maze_dropdown.listItems.item(0).isSelected = True
-
-        self.speed_slider = (
-            self.settings_group.children.addIntegerSliderListCommandInput(
-                InputIds.SpeedSlider.value,
-                "Speed",
-                list(range(n_speed_levels)),
-                False,
-            )
-        )
-        self.speed_slider.setText("slow", "fast")
-        self.speed_slider.valueOne = initial_speed_level
-
-        self.block_size_input = self.settings_group.children.addValueInput(
-            InputIds.BlockSize.value,
-            "Block size",
-            "mm",
-            adsk.core.ValueInput.createByReal(initial_block_size),
-        )
-        self.block_size_input.tooltip = "Side length of single block/voxel."
-
-        self.keep_blocks_input = self.settings_group.children.addBoolValueInput(
-            InputIds.KeepBodies.value, "Keep blocks", True, "", True
-        )
-        self.keep_blocks_input.tooltip = (
-            "Determines if the blocks will be kept after leaving the game."
-        )
-        # settings_group.isExpanded = False
-
-    def _create_controls_group(self):
-        self.controls_group = self.command.commandInputs.addGroupCommandInput(
-            InputIds.ControlsGroup.value, "Controls"
-        )
-
-        self.play_button = self.controls_group.children.addBoolValueInput(
-            InputIds.Play.value,
-            "Play",
-            True,
-            str(Path(__file__).parent / "resources" / "play_button"),
-            False,
-        )
-        self.play_button.tooltip = "Start/Continue the game."
-
-        self.pause_button = self.controls_group.children.addBoolValueInput(
-            InputIds.Pause.value,
-            "Pause",
-            True,
-            str(Path(__file__).parent / "resources" / "pause_button"),
-            False,
-        )
-        self.pause_button.tooltip = "Pause the game."
-        self.pause_button.isEnabled = False
-
-        self.reset_button = self.controls_group.children.addBoolValueInput(
-            InputIds.Reset.value,
-            "Reset",
-            True,
-            str(Path(__file__).parent / "resources" / "redo_button"),
-            False,
-        )
-        self.reset_button.tooltip = "Reset the game"
-
-        self.control_buttons = [self.play_button, self.pause_button, self.reset_button]
-
-    def _create_highscores_group(self):
-        self.highscores_group = self.command.commandInputs.addGroupCommandInput(
-            InputIds.HighscoresGroup.value, "Highscores"
-        )
-
-        self.highscore_heading = self.highscores_group.children.addTextBoxCommandInput(
-            InputIds.HighscoresHeading.value, "Rank", "Points", 1, True
-        )
-
-        scores = faf.utils.get_json_from_file(scores_path, [])
-        self.highscore_texts = [
-            self.highscores_group.children.addTextBoxCommandInput(
-                InputIds.HighscoresHeading.value + str(rank),
-                str(rank + 1),
-                str(scores[rank]) if rank < len(scores) else "-",
-                1,
-                True,
-            )
-            for rank in range(n_scores_displayed)
-        ]
-
-        self.highscores_group.isExpanded = False
-
-    def _unclick_control_buttons(self):
-        for button in self.control_buttons:
-            button.value = False
-
-    def start_state(self):
-        self.play_button.isEnabled = True
-        self.pause_button.isEnabled = False
-        self.reset_button.isEnabled = True
-        self._unclick_control_buttons()
-
-        self.block_size_input.isEnabled = True
-
-        self.maze_dropdown.isEnabled = True
-
-    def pause_state(self):
-        self.play_button.isEnabled = True
-        self.pause_button.isEnabled = False
-        self.reset_button.isEnabled = True
-        self._unclick_control_buttons()
-
-        self.block_size_input.isEnabled = True
-
-        self.maze_dropdown.isEnabled = False
-
-    def running_state(self):
-        self.play_button.isEnabled = False
-        self.pause_button.isEnabled = True
-        self.reset_button.isEnabled = True
-        self._unclick_control_buttons()
-
-        self.block_size_input.isEnabled = False
-
-        self.maze_dropdown.isEnabled = False
-
-    def game_over_state(self):
-        self.play_button.isEnabled = False
-        self.pause_button.isEnabled = False
-        self.reset_button.isEnabled = True
-        self._unclick_control_buttons()
-
-        self.block_size_input.isEnabled = True
-
-        self.maze_dropdown.isEnabled = False
-
-    def update_score(self):
-        pass
-
-    def _update_leaderboard(self):
-        pass
-
-
 def on_created(event_args: adsk.core.CommandCreatedEventArgs):
+    global command
     command = event_args.command
 
     # turn of parametric mode
@@ -250,22 +75,29 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
             return
 
     # create the command inputs
-    game_ui = GameUI(command)
-
-    # set up the game and world instacen
-    comp = faf.utils.new_comp("snacade")
-    design.rootComponent.allOccurrencesByComponent(comp).item(0).activate()
-    world = vox.VoxelWorld(initial_block_size, comp, offset=(1.5, 1.5))
-
-    global game
-    game = Game(
-        world,
-        game_ui,
-        mover_event_id,
+    game_ui = GameUI(
+        command,
+        SCORES_PATH,
+        N_SCORES_DISPLAYED,
+        N_SPEED_LEVELS,
+        INITIAL_SPEED_LEVEL,
+        INITIAL_BLOCK_SIZE,
+        NO_SCORE_SYMBOL,
     )
 
+    # set up the game and world instacen
+    global comp
+    comp = faf.utils.new_comp("snacade")
+    design.rootComponent.allOccurrencesByComponent(comp).item(0).activate()
+    world = vox.VoxelWorld(game_ui.block_size_input.value, comp, offset=(1.5, 1.5))
+
+    global game
+    game = Game(world, game_ui, mover_event_id, MIN_MOVE_WAIT_TIME, MAX_MOVE_WAIT_TIME)
+
     # set the camera
-    set_camera(game)
+    _set_camera(
+        game.height, game.width, game.game_ui.block_size_input.value, game.plane
+    )
 
     # does not work because command hasnt been created yet
     # event_args.command.doExecute(False)
@@ -295,10 +127,10 @@ def on_input_changed(event_args: adsk.core.InputChangedEventArgs):
     if event_args.input.id == InputIds.BlockSize.value:
         execution_queue.put(game.world.clear)
         game.world.grid_size = event_args.input.value
-        set_camera(game)
+        _set_camera(game.height, game.width, game.world.gridsize, game.plane)
 
     if event_args.input.id == InputIds.SpeedSlider.value:
-        game.speed = level_to_time_delta(event_args.input.valueOne)
+        game.speed = event_args.input.valueOne
 
     if event_args.input.id == InputIds.MazeDropdown.value:
         game.build_start_state()
