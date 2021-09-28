@@ -2,8 +2,8 @@ import random
 
 import adsk.core, adsk.fusion, adsk.cam
 
-from .voxler import voxler as vox
-from .fusion_addin_framework import fusion_addin_framework as faf
+from ..voxler import voxler as vox
+from ..fusion_addin_framework import fusion_addin_framework as faf
 
 
 class Snake:
@@ -75,48 +75,44 @@ class Snake:
         return self._elements[1:]
 
 
+def zigzag_obstacle_generator(height, width, n_zigzags, zizag_portion, vertical=True):
+    obstacles = set()
+    if vertical:
+        d = int(width / (n_zigzags + 1))
+        up = True
+        for i in range(n_zigzags):
+            x = int(d + i * d)
+            for y in range(0, int(height * zizag_portion)):
+                if up:
+                    obstacles.add((x, y))
+                else:
+                    obstacles.add((x, height - 1 - y))
+            up = not up
+    else:
+        d = int(height / (n_zigzags + 1))
+        up = True
+        for i in range(n_zigzags):
+            y = int(d + i * d)
+            for x in range(0, int(width * zizag_portion)):
+                if up:
+                    obstacles.add((x, y))
+                else:
+                    obstacles.add((width - 1 - x, y))
+            up = not up
+
+    return obstacles
+
+
+def random_obstacle_generator(height, width, n_obstacles, snake_head):
+    obstacles = set()
+    while len(obstacles) < n_obstacles:
+        new_obst = (random.randint(0, width), random.randint(0, height))
+        if abs(snake_head[0] - new_obst[0]) > 5 and abs(snake_head[1] - new_obst[1]):
+            obstacles.add(new_obst)
+    return obstacles
+
+
 class Game:
-    @staticmethod
-    def zigzag_obstacle_generator(
-        height, width, n_zigzags, zizag_portion, vertical=True
-    ):
-        obstacles = set()
-        if vertical:
-            d = int(width / (n_zigzags + 1))
-            up = True
-            for i in range(n_zigzags):
-                x = int(d + i * d)
-                for y in range(0, int(height * zizag_portion)):
-                    if up:
-                        obstacles.add((x, y))
-                    else:
-                        obstacles.add((x, height - 1 - y))
-                up = not up
-        else:
-            d = int(height / (n_zigzags + 1))
-            up = True
-            for i in range(n_zigzags):
-                y = int(d + i * d)
-                for x in range(0, int(width * zizag_portion)):
-                    if up:
-                        obstacles.add((x, y))
-                    else:
-                        obstacles.add((width - 1 - x, y))
-                up = not up
-
-        return obstacles
-
-    @staticmethod
-    def random_obstacle_generator(height, width, n_obstacles, snake_head):
-        obstacles = set()
-        while len(obstacles) < n_obstacles:
-            new_obst = (random.randint(0, width), random.randint(0, height))
-            if abs(snake_head[0] - new_obst[0]) > 5 and abs(
-                snake_head[1] - new_obst[1]
-            ):
-                obstacles.add(new_obst)
-        return obstacles
-
     start_configs = {
         "standard": {
             "portal": True,
@@ -140,7 +136,7 @@ class Game:
             "portal": False,
             "height": 25,
             "width": 50,
-            "obstacles": Game.zigzag_obstacle_generator(25, 50, 3, 0.7),
+            "obstacles": zigzag_obstacle_generator(25, 50, 3, 0.7),
             "snake_head": (5, 10),
             "snake_direction": "up",
             "snake_length": 5,
@@ -149,7 +145,7 @@ class Game:
             "portal": False,
             "height": 25,
             "width": 50,
-            "obstacles": Game.zigzag_obstacle_generator(25, 50, 3, 0.7, vertical=False),
+            "obstacles": zigzag_obstacle_generator(25, 50, 3, 0.7, vertical=False),
             "snake_head": (10, 22),
             "snake_direction": "right",
             "snake_length": 5,
@@ -158,7 +154,7 @@ class Game:
             "portal": True,
             "height": 25,
             "width": 50,
-            "obstacles": Game.random_obstacle_generator(25, 50, 35, (5, 10)),
+            "obstacles": random_obstacle_generator(25, 50, 35, (5, 10)),
             "snake_head": (5, 10),
             "snake_direction": "up",
             "snake_length": 5,
@@ -167,7 +163,7 @@ class Game:
             "portal": False,
             "height": 25,
             "width": 50,
-            "obstacles": Game.random_obstacle_generator(25, 50, 35, (5, 10)),
+            "obstacles": random_obstacle_generator(25, 50, 35, (5, 10)),
             "snake_head": (5, 10),
             "snake_direction": "up",
             "snake_length": 5,
@@ -215,12 +211,11 @@ class Game:
         self._max_move_time_delta = max_move_time_delta
         self._speed = None
         self._move_time_delta = None
-        self.speed = self._game_ui.speedSlider.valueOne
-
         self._mover_thread = faf.utils.PeriodicExecuter(
             self._move_time_delta,
             lambda: adsk.core.Application.get().fireCustomEvent(mover_event_id),
         )
+        self.speed = self._game_ui.speed_slider.valueOne
 
         self._state = "start"
 
@@ -240,9 +235,7 @@ class Game:
         if self.state != "start":
             return
 
-        start_config = self.start_configs[
-            self._game_ui.maze_dropdown.listItems.selectedItem.name
-        ]
+        start_config = self.start_configs[self._game_ui.maze_dropdown.selectedItem.name]
 
         self._score = 0
 
@@ -303,14 +296,13 @@ class Game:
             self._mover_thread.pause()
             self._snake.undo_move()
             self.state = "over"
-            # TODO port to game ui class
-            self._game_ui.update_scores(self._score)
+            self._game_ui.update_leaderboard(self._score)
 
         if self._snake.head == self._food:
             self._snake.eat()
             self._food = self._find_food_position()
             self._score += 1
-            self._game_ui.update_score()
+            self._game_ui.update_score(self._score)
 
     def update_world(self, *args, **kwargs):
         # TODO adapt for setable drawing plane

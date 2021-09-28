@@ -11,8 +11,8 @@ from .voxler import voxler as vox
 
 from .appdirs import appdirs
 
-from game import Game
-from ui import GameUI, InputIds
+from .src.game import Game
+from .src.ui import GameUI, InputIds
 
 ### GLOBALS (Settings) ###
 N_SCORES_DISPLAYED = 5
@@ -21,6 +21,7 @@ N_SPEED_LEVELS = 5
 INITIAL_SPEED_LEVEL = 2
 INITIAL_BLOCK_SIZE = 10
 NO_SCORE_SYMBOL = "-"
+RESOURCE_FOLDER = Path(__file__).parent / "resources"
 
 MIN_MOVE_WAIT_TIME = 0.1
 MAX_MOVE_WAIT_TIME = 0.5
@@ -77,6 +78,7 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
     # create the command inputs
     game_ui = GameUI(
         command,
+        RESOURCE_FOLDER,
         SCORES_PATH,
         N_SCORES_DISPLAYED,
         N_SPEED_LEVELS,

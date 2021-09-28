@@ -1,13 +1,12 @@
 from enum import auto
 import json
 import bisect
-from pathlib import Path
 
 import adsk.core, adsk.fusion, adsk.cam
 
-from .fusion_addin_framework import fusion_addin_framework as faf
+from ..fusion_addin_framework import fusion_addin_framework as faf
 
-from game import Game
+from .game import Game
 
 
 class InputIds(faf.utils.InputIdsBase):
@@ -22,12 +21,14 @@ class InputIds(faf.utils.InputIdsBase):
     HighscoresHeading = auto()
     SpeedSlider = auto()
     MazeDropdown = auto()
+    CurrentScore = auto()
 
 
 class GameUI:
     def __init__(
         self,
         command,
+        resource_folder,
         scores_path,
         n_scores_displayed,
         n_speed_levels,
@@ -38,6 +39,7 @@ class GameUI:
         self.command = command
 
         # TODO make attributes _protected
+        self.resource_folder = resource_folder
         self.scores_path = scores_path
         self.no_score_symbol = no_score_symbol
         self.n_scores_displayed = n_scores_displayed
@@ -98,11 +100,15 @@ class GameUI:
             InputIds.ControlsGroup.value, "Controls"
         )
 
+        self.current_score = self.controls_group.children.addTextBoxCommandInput(
+            InputIds.CurrentScore.value, "Score", str(0), 1, True
+        )
+
         self.play_button = self.controls_group.children.addBoolValueInput(
             InputIds.Play.value,
             "Play",
             True,
-            str(Path(__file__).parent / "resources" / "play_button"),
+            str(self.resource_folder / "play_button"),
             False,
         )
         self.play_button.tooltip = "Start/Continue the game."
@@ -111,7 +117,7 @@ class GameUI:
             InputIds.Pause.value,
             "Pause",
             True,
-            str(Path(__file__).parent / "resources" / "pause_button"),
+            str(self.resource_folder / "pause_button"),
             False,
         )
         self.pause_button.tooltip = "Pause the game."
@@ -121,7 +127,7 @@ class GameUI:
             InputIds.Reset.value,
             "Reset",
             True,
-            str(Path(__file__).parent / "resources" / "redo_button"),
+            str(self.resource_folder / "redo_button"),
             False,
         )
         self.reset_button.tooltip = "Reset the game"
@@ -137,7 +143,6 @@ class GameUI:
             InputIds.HighscoresHeading.value, "Rank", "Points", 1, True
         )
 
-        # scores = faf.utils.get_json_from_file(scores_path, [])
         self.highscore_texts = [
             self.highscores_group.children.addTextBoxCommandInput(
                 InputIds.HighscoresHeading.value + str(rank),
@@ -164,6 +169,8 @@ class GameUI:
         self.block_size_input.isEnabled = True
 
         self.maze_dropdown.isEnabled = True
+
+        self.update_score(0)
 
     def pause_state(self):
         self.play_button.isEnabled = True
@@ -203,7 +210,7 @@ class GameUI:
             "over": self.game_over_state,
         }[new_state]()
 
-    def update_leaderboad(self, score):
+    def update_leaderboard(self, score):
         scores = faf.utils.get_json_from_file(str(self.scores_path), [])
         if score is not None:
             achieved_rank = len(scores) - bisect.bisect_right(scores[::-1], score)
@@ -211,12 +218,15 @@ class GameUI:
             with open(self.scores_path, "w") as f:
                 json.dump(scores, f, indent=4)
 
-        msg = f"GAME OVER\n\nYour snake ate {score} snacks."
-        if achieved_rank < self.n_scores_displayed:
-            msg += f"\n\nCongratulations, you made the {faf.utils.make_ordinal(achieved_rank+1)} place in the ranking!"
-            for rank in range(self.n_scores_displayed):
-                self.highscore_texts[rank].text = str(
-                    scores[rank] if rank < len(scores) else self.no_score_symbol
-                )
+            msg = f"GAME OVER\n\nYour snake ate {score} snacks."
+            if achieved_rank < self.n_scores_displayed:
+                msg += f"\n\nCongratulations, you made the {faf.utils.make_ordinal(achieved_rank+1)} place in the ranking!"
+            adsk.core.Application.get().userInterface.messageBox(msg)
 
-        adsk.core.Application.get().userInterface.messageBox(msg)
+        for rank in range(self.n_scores_displayed):
+            self.highscore_texts[rank].text = str(
+                scores[rank] if rank < len(scores) else self.no_score_symbol
+            )
+
+    def update_score(self, score):
+        self.current_score.text = str(score)
