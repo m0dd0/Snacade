@@ -22,9 +22,20 @@ class InputIds(faf.utils.InputIdsBase):
     SpeedSlider = auto()
     MazeDropdown = auto()
     CurrentScore = auto()
+    CurrentScoreGroup = auto()
 
 
 class GameUI:
+    @staticmethod
+    def create_progress_dialog():
+        progress_dialog = (
+            adsk.core.Application.get().userInterface.createProgressDialog()
+        )
+        progress_dialog.message = "Building the world (%p%)"
+        progress_dialog.title = "Building the world"
+
+        return progress_dialog
+
     def __init__(
         self,
         command,
@@ -36,26 +47,35 @@ class GameUI:
         initial_block_size,
         no_score_symbol,
     ):
-        self.command = command
+        self._command = command
 
-        # TODO make attributes _protected
-        self.resource_folder = resource_folder
-        self.scores_path = scores_path
-        self.no_score_symbol = no_score_symbol
-        self.n_scores_displayed = n_scores_displayed
-        self.n_speed_levels = n_speed_levels
-        self.initial_speed_level = initial_speed_level
-        self.initial_block_size = initial_block_size
+        self._resource_folder = resource_folder
+        self._scores_path = scores_path
+        self._no_score_symbol = no_score_symbol
+        self._n_scores_displayed = n_scores_displayed
+        self._n_speed_levels = n_speed_levels
+        self._initial_speed_level = initial_speed_level
+        self._initial_block_size = initial_block_size
 
-        command.isOKButtonVisible = False
-        command.cancelButtonText = "Exit"
+        self._command.isOKButtonVisible = False
+        self._command.cancelButtonText = "Exit"
 
         self._create_controls_group()
         self._create_settings_group()
+        self._create_current_score_group()
         self._create_highscores_group()
 
+    def _create_current_score_group(self):
+        self.current_score_group = self._command.commandInputs.addGroupCommandInput(
+            InputIds.CurrentScoreGroup.value, "Current Score"
+        )
+
+        self.current_score = self.current_score_group.children.addTextBoxCommandInput(
+            InputIds.CurrentScore.value, "Points", str(0), 1, True
+        )
+
     def _create_settings_group(self):
-        self.settings_group = self.command.commandInputs.addGroupCommandInput(
+        self.settings_group = self._command.commandInputs.addGroupCommandInput(
             InputIds.SettingsGroup.value, "Settings"
         )
 
@@ -72,18 +92,18 @@ class GameUI:
             self.settings_group.children.addIntegerSliderListCommandInput(
                 InputIds.SpeedSlider.value,
                 "Speed",
-                list(range(self.n_speed_levels)),
+                list(range(self._n_speed_levels)),
                 False,
             )
         )
         self.speed_slider.setText("slow", "fast")
-        self.speed_slider.valueOne = self.initial_speed_level
+        self.speed_slider.valueOne = self._initial_speed_level
 
         self.block_size_input = self.settings_group.children.addValueInput(
             InputIds.BlockSize.value,
             "Block size",
             "mm",
-            adsk.core.ValueInput.createByReal(self.initial_block_size),
+            adsk.core.ValueInput.createByReal(self._initial_block_size),
         )
         self.block_size_input.tooltip = "Side length of single block/voxel."
 
@@ -96,19 +116,15 @@ class GameUI:
         # settings_group.isExpanded = False
 
     def _create_controls_group(self):
-        self.controls_group = self.command.commandInputs.addGroupCommandInput(
+        self.controls_group = self._command.commandInputs.addGroupCommandInput(
             InputIds.ControlsGroup.value, "Controls"
-        )
-
-        self.current_score = self.controls_group.children.addTextBoxCommandInput(
-            InputIds.CurrentScore.value, "Score", str(0), 1, True
         )
 
         self.play_button = self.controls_group.children.addBoolValueInput(
             InputIds.Play.value,
             "Play",
             True,
-            str(self.resource_folder / "play_button"),
+            str(self._resource_folder / "play_button"),
             False,
         )
         self.play_button.tooltip = "Start/Continue the game."
@@ -117,7 +133,7 @@ class GameUI:
             InputIds.Pause.value,
             "Pause",
             True,
-            str(self.resource_folder / "pause_button"),
+            str(self._resource_folder / "pause_button"),
             False,
         )
         self.pause_button.tooltip = "Pause the game."
@@ -127,7 +143,7 @@ class GameUI:
             InputIds.Reset.value,
             "Reset",
             True,
-            str(self.resource_folder / "redo_button"),
+            str(self._resource_folder / "redo_button"),
             False,
         )
         self.reset_button.tooltip = "Reset the game"
@@ -135,7 +151,7 @@ class GameUI:
         self.control_buttons = [self.play_button, self.pause_button, self.reset_button]
 
     def _create_highscores_group(self):
-        self.highscores_group = self.command.commandInputs.addGroupCommandInput(
+        self.highscores_group = self._command.commandInputs.addGroupCommandInput(
             InputIds.HighscoresGroup.value, "Highscores"
         )
 
@@ -147,11 +163,11 @@ class GameUI:
             self.highscores_group.children.addTextBoxCommandInput(
                 InputIds.HighscoresHeading.value + str(rank),
                 str(rank + 1),
-                self.no_score_symbol,
+                self._no_score_symbol,
                 1,
                 True,
             )
-            for rank in range(self.n_scores_displayed)
+            for rank in range(self._n_scores_displayed)
         ]
         self.update_leaderboard(None)
         self.highscores_group.isExpanded = False
@@ -211,22 +227,26 @@ class GameUI:
         }[new_state]()
 
     def update_leaderboard(self, score):
-        scores = faf.utils.get_json_from_file(str(self.scores_path), [])
+        scores = faf.utils.get_json_from_file(str(self._scores_path), [])
         if score is not None:
             achieved_rank = len(scores) - bisect.bisect_right(scores[::-1], score)
             scores.insert(achieved_rank, score)
-            with open(self.scores_path, "w") as f:
+            with open(self._scores_path, "w") as f:
                 json.dump(scores, f, indent=4)
 
             msg = f"GAME OVER\n\nYour snake ate {score} snacks."
-            if achieved_rank < self.n_scores_displayed:
+            if achieved_rank < self._n_scores_displayed:
                 msg += f"\n\nCongratulations, you made the {faf.utils.make_ordinal(achieved_rank+1)} place in the ranking!"
             adsk.core.Application.get().userInterface.messageBox(msg)
 
-        for rank in range(self.n_scores_displayed):
+        for rank in range(self._n_scores_displayed):
             self.highscore_texts[rank].text = str(
-                scores[rank] if rank < len(scores) else self.no_score_symbol
+                scores[rank] if rank < len(scores) else self._no_score_symbol
             )
 
     def update_score(self, score):
         self.current_score.text = str(score)
+
+    @property
+    def n_speed_levels(self):
+        return self._n_speed_levels

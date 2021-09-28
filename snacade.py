@@ -3,6 +3,7 @@ import logging
 from uuid import uuid4
 from pathlib import Path
 from queue import Queue
+from functools import partial
 
 import adsk.core, adsk.fusion, adsk.cam
 
@@ -102,10 +103,7 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
     # does not work because command hasnt been created yet
     # event_args.command.doExecute(False)
     # but updating world / creating bodies works in creaed handler (but not in keyDown handler)
-    progress_dialog = adsk.core.Application.get().userInterface.createProgressDialog()
-    progress_dialog.message = "Building the world (%p%)"
-    progress_dialog.title = "Building the world"
-    game.update_world(progress_dialog)
+    game.update_world(use_progress_dialog=True)
 
 
 def on_execute(event_args: adsk.core.CommandEventArgs):
@@ -124,18 +122,22 @@ def on_input_changed(event_args: adsk.core.InputChangedEventArgs):
         InputIds.Reset.value: game.reset,
     }.get(event_args.input.id, lambda: None)()
 
+    if event_args.input.id == InputIds.Reset.value:
+        execution_queue.put(game.update_world)
+
     if event_args.input.id == InputIds.BlockSize.value:
-        execution_queue.put(game.world.clear)
-        game.world.grid_size = event_args.input.value
-        _set_camera(game.height, game.width, game.world.grid_size, game.plane)
+        if event_args.input.isValidExpression and event_args.input.value > 0.0:
+            execution_queue.put(game.world.clear)
+            game.world.grid_size = event_args.input.value
+            _set_camera(game.height, game.width, game.world.grid_size, game.plane)
+            execution_queue.put(partial(game.update_world, use_progress_dialog=True))
 
     if event_args.input.id == InputIds.SpeedSlider.value:
         game.speed = event_args.input.valueOne
 
     if event_args.input.id == InputIds.MazeDropdown.value:
         game.build_start_state()
-
-    execution_queue.put(game.update_world)
+        execution_queue.put(partial(game.update_world, use_progress_dialog=True))
 
     command.doExecute(False)
 

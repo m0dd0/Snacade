@@ -304,19 +304,21 @@ class Game:
             self._score += 1
             self._game_ui.update_score(self._score)
 
-    def update_world(self, *args, **kwargs):
+    def update_world(self, use_progress_dialog=False, *args, **kwargs):
         # TODO adapt for setable drawing plane
-        self._world.update(
-            {
-                **{(*c, 0): self.maze_voxel_style for c in self._maze},
-                **{(*c, 0): self.snake_body_voxel_style for c in self._snake.body},
-                **{(*self._snake.head, 0): self.snake_head_voxel_style},
-                **{(*self._food, 0): self.food_voxel_style},
-                **{(*c, 0): self.portal_voxel_style for c in self._portal},
-            },
-            *args,
-            **kwargs,
-        )
+        voxels = {
+            **{(*c, 0): self.maze_voxel_style for c in self._maze},
+            **{(*c, 0): self.snake_body_voxel_style for c in self._snake.body},
+            **{(*self._snake.head, 0): self.snake_head_voxel_style},
+            **{(*self._food, 0): self.food_voxel_style},
+            **{(*c, 0): self.portal_voxel_style for c in self._portal},
+        }
+
+        if use_progress_dialog:
+            progress_dialog = self._game_ui.create_progress_dialog()
+            self._world.update(voxels, progress_dialog, *args, **kwargs)
+        else:
+            self._world.update(voxels, *args, **kwargs)
 
     def left(self):
         if self._state == "running":
