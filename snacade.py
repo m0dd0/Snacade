@@ -97,9 +97,7 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
     game = Game(world, game_ui, mover_event_id, MIN_MOVE_WAIT_TIME, MAX_MOVE_WAIT_TIME)
 
     # set the camera
-    _set_camera(
-        game.height, game.width, game.game_ui.block_size_input.value, game.plane
-    )
+    _set_camera(game.height, game.width, game.world.grid_size, game.plane)
 
     # does not work because command hasnt been created yet
     # event_args.command.doExecute(False)
@@ -129,7 +127,7 @@ def on_input_changed(event_args: adsk.core.InputChangedEventArgs):
     if event_args.input.id == InputIds.BlockSize.value:
         execution_queue.put(game.world.clear)
         game.world.grid_size = event_args.input.value
-        _set_camera(game.height, game.width, game.world.gridsize, game.plane)
+        _set_camera(game.height, game.width, game.world.grid_size, game.plane)
 
     if event_args.input.id == InputIds.SpeedSlider.value:
         game.speed = event_args.input.valueOne
