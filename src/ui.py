@@ -60,6 +60,8 @@ class GameUI:
         self._command.isOKButtonVisible = False
         self._command.cancelButtonText = "Exit"
 
+        self._command.helpFile = str(self._resource_folder / "help_info.html")
+
         self._create_controls_group()
         self._create_settings_group()
         self._create_current_score_group()
