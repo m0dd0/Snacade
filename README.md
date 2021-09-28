@@ -1,6 +1,8 @@
 # Snacade
 This addin allows you to play the famous snake game within Fusion360.
 Its made to entertain you :)
+The button/command to start the game is created in the addins panel in the tools tab
+and is not promoted by default.  
 All the blocks and and spheres, representing the snake or the maze, are
 real Fusion360 bodies which are created in the CAD model.
 

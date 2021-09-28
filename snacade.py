@@ -187,14 +187,15 @@ def run(context):
 
         global addin
         addin = faf.FusionAddin()
-        workspace = faf.Workspace(addin)
-        tab = faf.Tab(workspace)
-        panel = faf.Panel(tab, id="FunPanelId", name="Fun")
-        control = faf.Control(panel, isPromoted=True, isPromotedByDefault=True)
+        workspace = faf.Workspace(addin, id="FusionSolidEnvironment")
+        tab = faf.Tab(workspace, id="ToolsTab")
+        panel = faf.Panel(tab, id="SolidScriptsAddinsPanel")
+        control = faf.Control(panel)
         global mover_event_id
         mover_event_id = str(uuid4())
         cmd = faf.AddinCommand(
             control,
+            resourceFolder=str(RESOURCE_FOLDER / "snake_icon"),
             name="snacade",
             commandCreated=on_created,
             inputChanged=on_input_changed,
