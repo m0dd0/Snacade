@@ -1,0 +1,13 @@
+{
+	"autodeskProduct":	"Fusion360",
+	"type":	"addin",
+	"id":	"7bfa08df-f319-4b3b-b3ef-0ad1d24dbc43",
+	"author":	"Moritz Hesche",
+	"description":	{
+		"":	"Playing Snake within Fusion360."
+	},
+	"version":	"1.0.0",
+	"runOnStartup":	true,
+	"supportedOS":	"windows|mac",
+	"editEnabled":	true
+}
