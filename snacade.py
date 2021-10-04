@@ -116,13 +116,14 @@ def on_input_changed(event_args: adsk.core.InputChangedEventArgs):
     # inputs = event_args.inputs # !!! do NOT use this because of bug
     # (will only contain inputs of the same input group)
 
-    {
-        InputIds.Play.value: game.play,
-        InputIds.Pause.value: game.pause,
-        InputIds.Reset.value: game.reset,
-    }.get(event_args.input.id, lambda: None)()
+    if event_args.input.id == InputIds.Play.value:
+        game.play()
+
+    if event_args.input.id == InputIds.Pause.value:
+        game.pause()
 
     if event_args.input.id == InputIds.Reset.value:
+        game.reset()
         execution_queue.put(game.update_world)
 
     if event_args.input.id == InputIds.BlockSize.value:
