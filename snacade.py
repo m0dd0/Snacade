@@ -197,7 +197,7 @@ def run(context):
         cmd = faf.AddinCommand(
             control,
             resourceFolder=str(RESOURCE_FOLDER / "snake_icon"),
-            name="snacade",
+            name="Snacade",
             commandCreated=on_created,
             inputChanged=on_input_changed,
             keyDown=on_key_down,

@@ -3,9 +3,11 @@ This addin allows you to play the famous snake game within Fusion360.
 The addin was made just for fun and to showcase whats possible to achieve with Fusion360s API.
 However, all the blocks and and spheres, representing the snake or the maze, are real Fusion360 bodies so you can use them in your CAD model if you like.
 
+![Snacade in action](./resources/screenshots/demo_screenshot.png)
+
 The button/command to start the game is created in the addins panel in the tools tab. By default its not pinned to the toolbar.
 
-![snacade in action](./resources/demo_screenshot.png)
+![position in the UI](./resources/screenshots/ui_location.png)
 
 ## Settings
 ### World
@@ -26,4 +28,4 @@ in a new component after leaving the game.
 
 ## Highscores
 The best scores you achieved so far. You get one point per apple your snake ate during a game.
-The speed or theselected maze is not accounted for calculating your score.
+The speed or the selected maze are not accounted for calculating your score.
