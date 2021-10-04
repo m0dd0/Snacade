@@ -16,6 +16,8 @@ from .src.game import Game
 from .src.ui import GameUI, InputIds
 
 ### GLOBALS (Settings) ###
+LOGGING_ENABLED = False
+
 N_SCORES_DISPLAYED = 5
 SCORES_PATH = str(Path(appdirs.user_state_dir("snacade")) / "highscores.json")
 N_SPEED_LEVELS = 5
@@ -181,10 +183,11 @@ def run(context):
         app = adsk.core.Application.get()
         ui = app.userInterface
 
-        faf.utils.create_logger(
-            faf.__name__,
-            [logging.StreamHandler(), faf.utils.TextPaletteLoggingHandler()],
-        )
+        if LOGGING_ENABLED:
+            faf.utils.create_logger(
+                faf.__name__,
+                [logging.StreamHandler(), faf.utils.TextPaletteLoggingHandler()],
+            )
 
         global addin
         addin = faf.FusionAddin()

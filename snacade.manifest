@@ -6,8 +6,8 @@
 	"description":	{
 		"":	"Playing Snake within Fusion360."
 	},
-	"version":	"",
-	"runOnStartup":	false,
+	"version":	"1.0.0",
+	"runOnStartup":	true,
 	"supportedOS":	"windows|mac",
 	"editEnabled":	true
 }
