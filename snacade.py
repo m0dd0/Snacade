@@ -90,7 +90,7 @@ def on_created(event_args: adsk.core.CommandCreatedEventArgs):
 
     # set up the game and world instacen
     global comp
-    comp = faf.utils.new_comp("snacade")
+    comp = faf.utils.new_comp("Snacade")
     design.rootComponent.allOccurrencesByComponent(comp).item(0).activate()
     world = vox.VoxelWorld(game_ui.block_size_input.value, comp, offset=(1.5, 1.5))
 
