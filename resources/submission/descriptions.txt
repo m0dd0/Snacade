@@ -1,0 +1,21 @@
+App Name:
+Snacade
+
+App Short Description:
+Playing Snake within Fusion360.
+
+App Description:
+This addin allows you to play a version of the famous snake game directly in the Fusion360 CAD environment.
+All the blocks and spheres you see while playing can be kept as CAD bodies and be processed further after you finished your game. 
+
+General Usage Instructions:
+Click the snake icon to start the addin.
+To start the game click the play button. You can also pause and reset the game by clicking the corresponding buttons.
+Further options are described in the information/help file.
+After you left the game you can process the bodies manually if you selected the "keep bodies" option.
+
+Installation/Uninstallation:
+You can install/uninstall this addin with the default installer.
+
+Support Information:
+You can contact me with the information on my Autodesk account page if xou have any questions or facing any problems.
