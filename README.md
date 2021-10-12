@@ -29,3 +29,11 @@ in a new component after leaving the game.
 ## Highscores
 The best scores you achieved so far. You get one point per apple your snake ate during a game.
 The speed or the selected maze are not accounted for calculating your score.
+
+## Privacy policy
+This addin saves your achieved highscores in a single local file on your computer.
+Except from this the addin does not collect or use any user data.
+There are no third parties who might collect data.
+You can see and/or delete the saved highscores by checking out the folder C:\Users\user_name\AppData\Local\snacade.
+
+
